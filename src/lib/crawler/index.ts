@@ -34,7 +34,7 @@ export async function crawlPage(url: string): Promise<CrawlResult> {
   }
 }
 
-export async function discoverPages(baseUrl: string, html: string, maxPages: number = 15): Promise<string[]> {
+export async function discoverPages(baseUrl: string, html: string, maxPages: number = 30): Promise<string[]> {
   const base = new URL(baseUrl);
   const pages = new Set<string>();
   pages.add(baseUrl);
@@ -42,14 +42,12 @@ export async function discoverPages(baseUrl: string, html: string, maxPages: num
   // Try sitemap first
   const sitemapUrls = await fetchSitemap(base.origin);
   for (const url of sitemapUrls) {
-    if (pages.size >= maxPages) break;
     pages.add(url);
   }
 
   // Also extract links from the page
   const $ = cheerio.load(html);
   $('a[href]').each((_, el) => {
-    if (pages.size >= maxPages) return false;
     try {
       const href = $(el).attr('href');
       if (!href) return;
@@ -61,7 +59,9 @@ export async function discoverPages(baseUrl: string, html: string, maxPages: num
     } catch { /* skip invalid URLs */ }
   });
 
-  return Array.from(pages).slice(0, maxPages);
+  const allUrls = Array.from(pages);
+  const prioritized = prioritizeUrls(allUrls, base.origin);
+  return prioritized.slice(0, maxPages);
 }
 
 async function fetchSitemap(origin: string): Promise<string[]> {
@@ -87,6 +87,35 @@ async function fetchSitemap(origin: string): Promise<string[]> {
     });
   } catch { /* sitemap not available */ }
   return urls.slice(0, 50);
+}
+
+function prioritizeUrls(urls: string[], baseOrigin: string): string[] {
+  const scored = urls.map(url => {
+    const path = new URL(url).pathname.toLowerCase();
+    let priority = 0;
+
+    // High-value content pages
+    if (/\/blog\/|\/articles\/|\/docs\/|\/guide/.test(path)) priority += 10;
+    if (/\/about|\/team|\/company/.test(path)) priority += 8;
+    if (/\/products\/|\/services\/|\/features/.test(path)) priority += 8;
+    if (/\/pricing/.test(path)) priority += 6;
+    if (/\/faq|\/help|\/support/.test(path)) priority += 6;
+    if (/\/case-stud|\/testimonial|\/review/.test(path)) priority += 7;
+
+    // Penalize low-value pages
+    if (/\/tag\/|\/category\/|\/page\/\d/.test(path)) priority -= 5;
+    if (/\/privacy|\/terms|\/cookie|\/legal/.test(path)) priority -= 3;
+    if (/\/login|\/signup|\/register|\/cart|\/checkout/.test(path)) priority -= 8;
+    if (/\/search|\/404|\/50\d/.test(path)) priority -= 10;
+
+    // Prefer shorter paths (closer to root = more important)
+    const depth = path.split('/').filter(Boolean).length;
+    priority -= depth * 0.5;
+
+    return { url, priority };
+  });
+
+  return scored.sort((a, b) => b.priority - a.priority).map(s => s.url);
 }
 
 function isAssetUrl(path: string): boolean {

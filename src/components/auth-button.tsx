@@ -1,36 +1,78 @@
 'use client';
 
+import { useState, useRef, useEffect } from 'react';
 import { useSession, signIn, signOut } from 'next-auth/react';
+import { LogOut } from 'lucide-react';
 
 export function AuthButton() {
   const { data: session, status } = useSession();
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    function handleEscape(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false);
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('keydown', handleEscape);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [open]);
 
   if (status === 'loading') {
     return (
-      <div className="w-20 h-8 rounded-lg bg-bg-card animate-pulse" />
+      <div className="w-8 h-8 rounded-full bg-bg-elevated animate-pulse" />
     );
   }
 
   if (session?.user) {
     return (
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2">
-          {session.user.image && (
+      <div className="relative" ref={dropdownRef}>
+        <button
+          onClick={() => setOpen(!open)}
+          className="w-8 h-8 rounded-full overflow-hidden ring-2 ring-transparent hover:ring-accent/40 transition-all cursor-pointer focus:outline-none focus:ring-accent/40"
+        >
+          {session.user.image ? (
             <img
               src={session.user.image}
               alt=""
-              className="w-6 h-6 rounded-full"
+              className="w-full h-full object-cover"
               referrerPolicy="no-referrer"
             />
+          ) : (
+            <div className="w-full h-full bg-accent flex items-center justify-center text-white text-sm font-bold">
+              {session.user.name?.[0]?.toUpperCase() || '?'}
+            </div>
           )}
-          <span className="text-[13px] text-text-secondary">{session.user.name}</span>
-        </div>
-        <button
-          onClick={() => signOut()}
-          className="text-[13px] text-text-muted hover:text-text transition-colors"
-        >
-          Sign out
         </button>
+
+        {open && (
+          <div
+            className="absolute right-0 top-11 w-56 rounded-xl bg-bg-card border border-border shadow-xl overflow-hidden z-50"
+            style={{ animation: 'fadeIn 0.15s ease-out' }}
+          >
+            <div className="px-4 py-3 border-b border-border">
+              <p className="text-sm font-medium text-text truncate">{session.user.name}</p>
+              <p className="text-xs text-text-muted truncate">{session.user.email}</p>
+            </div>
+            <button
+              onClick={() => { setOpen(false); signOut(); }}
+              className="w-full flex items-center gap-2.5 px-4 py-3 text-sm text-text-secondary hover:text-text hover:bg-bg-elevated transition-all cursor-pointer"
+            >
+              <LogOut size={14} />
+              Sign out
+            </button>
+          </div>
+        )}
       </div>
     );
   }
@@ -38,7 +80,7 @@ export function AuthButton() {
   return (
     <button
       onClick={() => signIn('google')}
-      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card hover:bg-bg-elevated/50 border border-border text-[13px] text-text-secondary hover:text-text transition-all"
+      className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card hover:bg-bg-elevated border border-border-bright text-[13px] text-text hover:text-text transition-all cursor-pointer"
     >
       <svg width="14" height="14" viewBox="0 0 24 24">
         <path

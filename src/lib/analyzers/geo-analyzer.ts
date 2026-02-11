@@ -15,6 +15,7 @@ export function analyzeGEO(html: string, url: string, headers: Record<string, st
     technicalHealth: analyzeTechnicalHealth($, headers, loadTime),
     contentUniqueness: analyzeContentUniqueness($),
     multiFormatContent: analyzeMultiFormatContent($),
+    eeatSignals: analyzeEEATSignals($, url),
   };
 }
 
@@ -238,7 +239,7 @@ function analyzeSchemaMarkup($: cheerio.CheerioAPI): CategoryScore {
   const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);
   const score = Math.round((totalPoints / maxPoints) * 100);
 
-  return { score, grade: getGrade(score), weight: 0.15, findings, recommendations };
+  return { score, grade: getGrade(score), weight: 0.13, findings, recommendations };
 }
 
 function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string): CategoryScore {
@@ -281,8 +282,10 @@ function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string): CategorySc
   if (contentLinks < 5) recommendations.push('Add contextual links within your content body (not just navigation). Link to related articles, guides, and resources to demonstrate comprehensive topic coverage.');
 
   // Content depth (word count)
-  const bodyText = $('body').text().replace(/\s+/g, ' ').trim();
-  const wordCount = bodyText.split(/\s+/).length;
+  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
+  const mainContentEl = $(mainSelectors).first();
+  const contentText = (mainContentEl.length ? mainContentEl : $('body')).text().replace(/\s+/g, ' ').trim();
+  const wordCount = contentText.split(/\s+/).length;
   findings.push({
     check: 'Content depth (word count)',
     status: wordCount >= 1500 ? 'pass' : wordCount >= 800 ? 'partial' : 'fail',
@@ -327,8 +330,21 @@ function analyzeCitationWorthiness($: cheerio.CheerioAPI): CategoryScore {
   const bodyText = $('body').text();
 
   // Statistics and numbers
-  const statsPattern = /\d+(\.\d+)?%|\$[\d,]+(\.\d+)?|\d+x\s|(\d{1,3}(,\d{3})+)/g;
-  const statsMatches = bodyText.match(statsPattern) || [];
+  const statPatterns = [
+    /\d+(\.\d+)?%/g,
+    /\$[\d,]+(\.\d+)?(?:\s*(million|billion|M|B|K))?/g,
+    /\d+(\.\d+)?x\s+(?:more|less|faster|slower|higher|lower|increase|decrease|improvement|growth)/gi,
+    /(?:increased|decreased|grew|dropped|rose|fell|improved|reduced)\s+(?:by\s+)?\d+/gi,
+    /(?:survey|study|report|research|analysis)\s+(?:of|with|across)\s+[\d,]+/gi,
+  ];
+  const matchPositions = new Set<string>();
+  for (const pattern of statPatterns) {
+    let match: RegExpExecArray | null;
+    while ((match = pattern.exec(bodyText)) !== null) {
+      matchPositions.add(`${match.index}:${match[0].length}`);
+    }
+  }
+  const statsMatches = Array.from(matchPositions);
   findings.push({
     check: 'Statistics and quantitative data',
     status: statsMatches.length >= 5 ? 'pass' : statsMatches.length >= 2 ? 'partial' : 'fail',
@@ -390,7 +406,7 @@ function analyzeCitationWorthiness($: cheerio.CheerioAPI): CategoryScore {
   const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);
   const score = Math.round((totalPoints / maxPoints) * 100);
 
-  return { score, grade: getGrade(score), weight: 0.15, findings, recommendations };
+  return { score, grade: getGrade(score), weight: 0.13, findings, recommendations };
 }
 
 function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, string>): CategoryScore {
@@ -479,17 +495,19 @@ function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, 
   const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);
   const score = Math.round((totalPoints / maxPoints) * 100);
 
-  return { score, grade: getGrade(score), weight: 0.10, findings, recommendations };
+  return { score, grade: getGrade(score), weight: 0.08, findings, recommendations };
 }
 
 function analyzeLanguagePatterns($: cheerio.CheerioAPI): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
-  const bodyText = $('body').text();
+  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
+  const mainContent = $(mainSelectors).first();
+  const contentText = (mainContent.length ? mainContent : $('body')).text().replace(/\s+/g, ' ').trim();
   const paragraphs = $('p').toArray().map(el => $(el).text().trim()).filter(t => t.length > 30);
 
   // Definitional statements
-  const definitions = bodyText.match(/(?:\b\w+\b\s+)?(?:is defined as|refers to|is a\s+\w+\s+that|is the process of|describes the|means that|can be described as)/gi) || [];
+  const definitions = contentText.match(/(?:\b\w+\b\s+)?(?:is defined as|refers to|is a\s+\w+\s+that|is the process of|describes the|means that|can be described as)/gi) || [];
   findings.push({
     check: 'Definitional statements',
     status: definitions.length >= 3 ? 'pass' : definitions.length >= 1 ? 'partial' : 'fail',
@@ -500,8 +518,8 @@ function analyzeLanguagePatterns($: cheerio.CheerioAPI): CategoryScore {
   if (definitions.length < 3) recommendations.push('Add more definitional statements. LLMs prefer content with clear "[Subject] is [definition]" patterns for easy extraction.');
 
   // Reading level (approximation using average sentence length and syllable complexity)
-  const sentences = bodyText.split(/[.!?]+/).filter(s => s.trim().length > 10);
-  const avgSentenceLength = sentences.length > 0 ? bodyText.split(/\s+/).length / sentences.length : 0;
+  const sentences = contentText.split(/[.!?]+/).filter(s => s.trim().length > 10);
+  const avgSentenceLength = sentences.length > 0 ? contentText.split(/\s+/).length / sentences.length : 0;
   const goodReadability = avgSentenceLength >= 12 && avgSentenceLength <= 25;
   findings.push({
     check: 'Sentence length optimization',
@@ -512,9 +530,14 @@ function analyzeLanguagePatterns($: cheerio.CheerioAPI): CategoryScore {
   });
   if (!goodReadability) recommendations.push('Optimize sentence length to 15-25 words average. Fluency optimization improves GEO visibility by 25.1%.');
 
-  // Passive voice detection (simplified)
-  const passivePatterns = bodyText.match(/\b(?:was|were|is|are|been|being|be)\s+\w+ed\b/gi) || [];
-  const passiveRatio = sentences.length > 0 ? passivePatterns.length / sentences.length : 0;
+  // Passive voice detection (improved with adjective exclusions)
+  const passiveMatches = sentences.filter(s => {
+    const passiveRegex = /\b(?:was|were|is|are|been|being|be|been)\s+(\w+ed)\b/gi;
+    const matches = s.match(passiveRegex) || [];
+    const adjectiveExclusions = /(?:pleased|interested|excited|concerned|designed|based|related|required|needed|used|expected|supposed|allowed|called|named|located|certified|licensed|experienced|qualified|dedicated)/i;
+    return matches.some(m => !adjectiveExclusions.test(m));
+  });
+  const passiveRatio = sentences.length > 0 ? passiveMatches.length / sentences.length : 0;
   findings.push({
     check: 'Active voice usage',
     status: passiveRatio < 0.15 ? 'pass' : passiveRatio < 0.3 ? 'partial' : 'fail',
@@ -525,7 +548,7 @@ function analyzeLanguagePatterns($: cheerio.CheerioAPI): CategoryScore {
   if (passiveRatio >= 0.15) recommendations.push('Reduce passive voice to under 15%. Use clear Subject-Verb-Object construction — AI systems extract and cite assertive, direct language more reliably.');
 
   // Hedging language
-  const hedgingWords = bodyText.match(/\b(?:might|perhaps|could be|possibly|arguably|it seems|it appears|may or may not|sort of|kind of)\b/gi) || [];
+  const hedgingWords = contentText.match(/\b(?:might|perhaps|could be|possibly|arguably|it seems|it appears|may or may not|sort of|kind of)\b/gi) || [];
   findings.push({
     check: 'Assertive/declarative tone',
     status: hedgingWords.length <= 3 ? 'pass' : hedgingWords.length <= 8 ? 'partial' : 'fail',
@@ -655,7 +678,7 @@ function analyzeMetaInformation($: cheerio.CheerioAPI): CategoryScore {
   const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);
   const score = Math.round((totalPoints / maxPoints) * 100);
 
-  return { score, grade: getGrade(score), weight: 0.05, findings, recommendations };
+  return { score, grade: getGrade(score), weight: 0.03, findings, recommendations };
 }
 
 function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, string>, loadTime: number): CategoryScore {
@@ -736,10 +759,12 @@ function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, s
 function analyzeContentUniqueness($: cheerio.CheerioAPI): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
-  const bodyText = $('body').text();
+  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
+  const mainContent = $(mainSelectors).first();
+  const contentText = (mainContent.length ? mainContent : $('body')).text().replace(/\s+/g, ' ').trim();
 
   // First-person experience signals
-  const experiencePatterns = bodyText.match(/\b(?:we tested|in our experience|we found that|our team|we built|we discovered|our data shows|we analyzed|our research|we implemented)\b/gi) || [];
+  const experiencePatterns = contentText.match(/\b(?:we tested|in our experience|we found that|our team|we built|we discovered|our data shows|we analyzed|our research|we implemented)\b/gi) || [];
   findings.push({
     check: 'First-person experience signals',
     status: experiencePatterns.length >= 3 ? 'pass' : experiencePatterns.length >= 1 ? 'partial' : 'fail',
@@ -750,7 +775,7 @@ function analyzeContentUniqueness($: cheerio.CheerioAPI): CategoryScore {
   if (experiencePatterns.length < 3) recommendations.push('Add first-person experience signals ("we tested," "our data shows," "in our experience"). AI systems favor content demonstrating real-world expertise and firsthand knowledge (E-E-A-T Experience signal).');
 
   // Proprietary data / original research signals
-  const researchPatterns = bodyText.match(/\b(?:our survey|our analysis|our benchmark|our study|we surveyed|we analyzed \d|our dataset|proprietary data|original research)\b/gi) || [];
+  const researchPatterns = contentText.match(/\b(?:our survey|our analysis|our benchmark|our study|we surveyed|we analyzed \d|our dataset|proprietary data|original research)\b/gi) || [];
   findings.push({
     check: 'Original research / proprietary data',
     status: researchPatterns.length >= 2 ? 'pass' : researchPatterns.length >= 1 ? 'partial' : 'fail',
@@ -761,7 +786,7 @@ function analyzeContentUniqueness($: cheerio.CheerioAPI): CategoryScore {
   if (researchPatterns.length < 2) recommendations.push('Include original research, surveys, or proprietary data analysis. Content with original statistics sees 30-40% higher AI visibility. Conduct surveys, analyze data, or publish benchmarks.');
 
   // Unique frameworks/methodologies
-  const frameworkPatterns = bodyText.match(/\b(?:our framework|our methodology|our approach|our model|our system|our process|step[- ]by[- ]step|our (?:\d+)[- ]step)\b/gi) || [];
+  const frameworkPatterns = contentText.match(/\b(?:our framework|our methodology|our approach|our model|our system|our process|step[- ]by[- ]step|our (?:\d+)[- ]step)\b/gi) || [];
   findings.push({
     check: 'Unique frameworks or methodologies',
     status: frameworkPatterns.length >= 2 ? 'pass' : frameworkPatterns.length >= 1 ? 'partial' : 'fail',
@@ -772,8 +797,6 @@ function analyzeContentUniqueness($: cheerio.CheerioAPI): CategoryScore {
   if (frameworkPatterns.length < 2) recommendations.push('Develop unique frameworks, methodologies, or mental models. This creates content with high "information gain" that AI systems prefer to cite.');
 
   // Content length (82.5% of AI citations link to nested content pages)
-  const mainContent = $('main, article, [role="main"]').first();
-  const contentText = mainContent.length ? mainContent.text().trim() : bodyText;
   const wordCount = contentText.split(/\s+/).length;
   findings.push({
     check: 'Content depth for uniqueness',
@@ -880,6 +903,153 @@ function analyzeMultiFormatContent($: cheerio.CheerioAPI): CategoryScore {
     points: defLists >= 1 ? 5 : 2,
     maxPoints: 5,
   });
+
+  const totalPoints = findings.reduce((s, f) => s + f.points, 0);
+  const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);
+  const score = Math.round((totalPoints / maxPoints) * 100);
+
+  return { score, grade: getGrade(score), weight: 0.08, findings, recommendations };
+}
+
+function analyzeEEATSignals($: cheerio.CheerioAPI, url: string): CategoryScore {
+  const findings: Finding[] = [];
+  const recommendations: string[] = [];
+
+  // Extract JSON-LD blocks for schema checks
+  const jsonLdBlocks: unknown[] = [];
+  $('script[type="application/ld+json"]').each((_, el) => {
+    try {
+      const parsed = JSON.parse($(el).html() || '');
+      if (Array.isArray(parsed)) jsonLdBlocks.push(...parsed);
+      else jsonLdBlocks.push(parsed);
+    } catch { /* invalid JSON-LD */ }
+  });
+
+  const bodyText = $('body').text();
+  const allLinks = $('a[href]').toArray().map(el => ({
+    href: $(el).attr('href') || '',
+    text: $(el).text().trim().toLowerCase(),
+  }));
+
+  // 1. Author identification (15 pts)
+  const hasPersonSchema = jsonLdBlocks.some((b: unknown) => {
+    const obj = b as Record<string, unknown>;
+    if (obj['@type'] === 'Person' && obj.name) return true;
+    if (obj.author && typeof obj.author === 'object') {
+      const author = obj.author as Record<string, unknown>;
+      return author['@type'] === 'Person' && author.name;
+    }
+    return false;
+  });
+  const hasByline = /(?:by\s+[A-Z][a-z]+\s+[A-Z][a-z]+|author:\s*[A-Z][a-z]+)/i.test(bodyText);
+  const hasAuthorLink = $('a[rel="author"]').length > 0;
+  const hasAuthor = hasPersonSchema || hasByline || hasAuthorLink;
+  findings.push({
+    check: 'Author identification',
+    status: hasAuthor ? 'pass' : 'fail',
+    details: hasAuthor
+      ? `Author identified via ${hasPersonSchema ? 'Person schema' : hasByline ? 'visible byline' : 'rel="author" link'}`
+      : 'No author identification found',
+    points: hasAuthor ? 15 : 0,
+    maxPoints: 15,
+  });
+  if (!hasAuthor) recommendations.push('Add clear author identification — use Person schema with name, a visible byline ("By [Name]"), or a rel="author" link. Author attribution is a core E-E-A-T signal.');
+
+  // 2. Author bio/credentials (15 pts)
+  const hasAuthorPage = allLinks.some(l => /author|profile|team\/|about.*author/i.test(l.href));
+  const credentialKeywords = /(?:PhD|Ph\.D|certified|years of experience|founder|CEO|CTO|director|professor|expert|specialist)/i;
+  const hasBioSection = $('*').toArray().some(el => {
+    const text = $(el).text();
+    return text.length < 500 && text.length > 30 && credentialKeywords.test(text) && /(?:author|bio|about|written by)/i.test($(el).closest('div, section, aside').attr('class') || $(el).closest('div, section, aside').attr('id') || '');
+  });
+  const hasCredentials = hasAuthorPage || hasBioSection || credentialKeywords.test(bodyText);
+  findings.push({
+    check: 'Author bio/credentials',
+    status: hasAuthorPage ? 'pass' : hasCredentials ? 'partial' : 'fail',
+    details: hasAuthorPage
+      ? 'Author page link found'
+      : hasCredentials ? 'Credential keywords found but no dedicated author page' : 'No author bio or credentials detected',
+    points: hasAuthorPage ? 15 : hasCredentials ? 8 : 0,
+    maxPoints: 15,
+  });
+  if (!hasAuthorPage) recommendations.push('Link to a dedicated author page with bio, credentials, and social profiles. Author authority pages strengthen E-E-A-T signals for AI engines.');
+
+  // 3. About page (15 pts)
+  const urlHasAbout = /\/about/i.test(url);
+  const hasAboutLink = allLinks.some(l => /\/about/i.test(l.href));
+  const hasAboutHeading = $('h1, h2, h3').toArray().some(el => /about/i.test($(el).text()));
+  const hasAboutPage = urlHasAbout || hasAboutLink || hasAboutHeading;
+  findings.push({
+    check: 'About page',
+    status: hasAboutPage ? 'pass' : 'fail',
+    details: hasAboutPage
+      ? `About page ${urlHasAbout ? 'is this page' : hasAboutLink ? 'linked from page' : 'heading found'}`
+      : 'No about page detected',
+    points: hasAboutPage ? 15 : 0,
+    maxPoints: 15,
+  });
+  if (!hasAboutPage) recommendations.push('Add a link to an About page that describes your organization, mission, and team. This is a fundamental E-E-A-T trust signal.');
+
+  // 4. Trust indicators (15 pts) — SSL always passes since HTTPS
+  const hasPrivacyPolicy = allLinks.some(l => /privacy/i.test(l.href) || /privacy policy/i.test(l.text));
+  const hasTerms = allLinks.some(l => /terms/i.test(l.href) || /terms of (service|use)/i.test(l.text));
+  const trustCount = 1 + (hasPrivacyPolicy ? 1 : 0) + (hasTerms ? 1 : 0); // 1 for SSL (always)
+  findings.push({
+    check: 'Trust indicators',
+    status: trustCount >= 3 ? 'pass' : trustCount >= 2 ? 'partial' : 'fail',
+    details: `SSL: yes, Privacy policy: ${hasPrivacyPolicy ? 'yes' : 'no'}, Terms page: ${hasTerms ? 'yes' : 'no'}`,
+    points: trustCount >= 3 ? 15 : trustCount >= 2 ? 10 : 5,
+    maxPoints: 15,
+  });
+  if (trustCount < 3) recommendations.push('Add links to privacy policy and terms of service pages. These legal pages are fundamental trust indicators for E-E-A-T.');
+
+  // 5. Organization identity (15 pts)
+  const hasOrgSchema = jsonLdBlocks.some((b: unknown) => {
+    const obj = b as Record<string, unknown>;
+    return (obj['@type'] === 'Organization' || obj['@type'] === 'LocalBusiness') && obj.logo && obj.sameAs;
+  });
+  const hasCompanyInfo = /(?:founded in \d{4}|established \d{4}|registered|company number|registration|headquarters|address:)/i.test(bodyText);
+  const hasOrgIdentity = hasOrgSchema || hasCompanyInfo;
+  findings.push({
+    check: 'Organization identity',
+    status: hasOrgSchema ? 'pass' : hasCompanyInfo ? 'partial' : 'fail',
+    details: hasOrgSchema
+      ? 'Organization schema with logo and social links found'
+      : hasCompanyInfo ? 'Company info found but no Organization schema with logo + sameAs' : 'No organization identity signals detected',
+    points: hasOrgSchema ? 15 : hasCompanyInfo ? 8 : 0,
+    maxPoints: 15,
+  });
+  if (!hasOrgSchema) recommendations.push('Add Organization schema with logo and sameAs social profile links. This establishes entity recognition and organizational authority across AI platforms.');
+
+  // 6. External validation (15 pts)
+  const authorityDomains = /(?:\.gov|\.edu|wikipedia\.org|reuters\.com|bbc\.com|nytimes\.com|washingtonpost\.com|nature\.com|sciencedirect\.com|pubmed|springer\.com|ieee\.org|acm\.org)/i;
+  const hasAuthorityLinks = allLinks.some(l => authorityDomains.test(l.href));
+  const hasPressMentions = /(?:featured in|as seen on|as seen in|press coverage|media mentions|featured by|recognized by|endorsed by)/i.test(bodyText);
+  const hasAwards = /(?:award|certified|accredited|recognized|winner|ISO \d+|certification|badge of)/i.test(bodyText);
+  const validationCount = (hasAuthorityLinks ? 1 : 0) + (hasPressMentions ? 1 : 0) + (hasAwards ? 1 : 0);
+  findings.push({
+    check: 'External validation',
+    status: validationCount >= 2 ? 'pass' : validationCount >= 1 ? 'partial' : 'fail',
+    details: `Authority links: ${hasAuthorityLinks ? 'yes' : 'no'}, Press mentions: ${hasPressMentions ? 'yes' : 'no'}, Awards/certifications: ${hasAwards ? 'yes' : 'no'}`,
+    points: validationCount >= 2 ? 15 : validationCount >= 1 ? 8 : 0,
+    maxPoints: 15,
+  });
+  if (validationCount < 2) recommendations.push('Add external validation signals — link to authority domains (.gov, .edu, major publications), mention press coverage ("featured in"), and display awards or certifications.');
+
+  // 7. Contact transparency (10 pts)
+  const hasContactPage = allLinks.some(l => /contact/i.test(l.href) || /contact us/i.test(l.text));
+  const hasEmail = /[\w.+-]+@[\w-]+\.[\w.]+/.test(bodyText) || $('a[href^="mailto:"]').length > 0;
+  const hasPhone = /(?:\+?\d{1,3}[-.\s]?)?\(?\d{2,4}\)?[-.\s]?\d{3,4}[-.\s]?\d{3,4}/.test(bodyText) || $('a[href^="tel:"]').length > 0;
+  const hasAddress = $('address').length > 0 || /(?:\d+\s+\w+\s+(?:street|st|avenue|ave|road|rd|boulevard|blvd|drive|dr|lane|ln|way|court|ct))/i.test(bodyText);
+  const contactCount = (hasContactPage ? 1 : 0) + (hasEmail ? 1 : 0) + (hasPhone ? 1 : 0) + (hasAddress ? 1 : 0);
+  findings.push({
+    check: 'Contact transparency',
+    status: contactCount >= 3 ? 'pass' : contactCount >= 1 ? 'partial' : 'fail',
+    details: `Contact page: ${hasContactPage ? 'yes' : 'no'}, Email: ${hasEmail ? 'yes' : 'no'}, Phone: ${hasPhone ? 'yes' : 'no'}, Address: ${hasAddress ? 'yes' : 'no'}`,
+    points: contactCount >= 3 ? 10 : contactCount >= 1 ? 5 : 0,
+    maxPoints: 10,
+  });
+  if (contactCount < 3) recommendations.push('Improve contact transparency — add a contact page, visible email, phone number, and physical address. Multiple contact methods strengthen E-E-A-T trust signals.');
 
   const totalPoints = findings.reduce((s, f) => s + f.points, 0);
   const maxPoints = findings.reduce((s, f) => s + f.maxPoints, 0);

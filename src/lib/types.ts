@@ -1,3 +1,5 @@
+export type SiteType = 'saas-api' | 'ecommerce' | 'local-business' | 'content-publisher' | 'general';
+
 export interface CrawlResult {
   url: string;
   html: string;
@@ -24,21 +26,11 @@ export interface GEOAnalysis {
   technicalHealth: CategoryScore;
   contentUniqueness: CategoryScore;
   multiFormatContent: CategoryScore;
+  eeatSignals: CategoryScore;
 }
 
 export interface AEOAnalysis {
-  documentationStructure: CategoryScore;
-  apiDocumentation: CategoryScore;
-  codeExamples: CategoryScore;
-  llmsTxt: CategoryScore;
-  sdkQuality: CategoryScore;
-  authSimplicity: CategoryScore;
-  quickstartGuide: CategoryScore;
-  errorMessages: CategoryScore;
-  changelogVersioning: CategoryScore;
-  mcpServer: CategoryScore;
-  integrationGuides: CategoryScore;
-  machineReadableSitemaps: CategoryScore;
+  [key: string]: CategoryScore;
 }
 
 export interface CategoryScore {
@@ -61,6 +53,7 @@ export interface SiteAnalysis {
   url: string;
   crawledAt: string;
   pagesAnalyzed: number;
+  siteType: SiteType;
   pageAnalyses: PageAnalysis[];
   geoScore: number;
   geoGrade: string;
@@ -84,6 +77,23 @@ export interface Recommendation {
   currentScore: number;
   potentialScore: number;
   impact: string;
+  codeSnippet?: {
+    language: string;
+    code: string;
+    label: string;
+  };
+}
+
+export interface ShareableResult {
+  u: string;
+  t: string;
+  p: number;
+  st: string;
+  g: number;
+  a: number;
+  o: number;
+  gc: Record<string, number>;
+  ac: Record<string, number>;
 }
 
 export function getGrade(score: number): string {
@@ -97,18 +107,19 @@ export function getGrade(score: number): string {
 
 export const GEO_WEIGHTS = {
   contentStructure: 0.12,
-  schemaMarkup: 0.15,
+  schemaMarkup: 0.13,
   topicalAuthority: 0.10,
-  citationWorthiness: 0.15,
-  contentFreshness: 0.10,
+  citationWorthiness: 0.13,
+  contentFreshness: 0.08,
   languagePatterns: 0.08,
-  metaInformation: 0.05,
+  metaInformation: 0.03,
   technicalHealth: 0.05,
   contentUniqueness: 0.10,
-  multiFormatContent: 0.10,
+  multiFormatContent: 0.08,
+  eeatSignals: 0.10,
 };
 
-export const AEO_WEIGHTS = {
+export const AEO_WEIGHTS: Record<string, number> = {
   documentationStructure: 0.10,
   apiDocumentation: 0.12,
   codeExamples: 0.10,
@@ -121,4 +132,62 @@ export const AEO_WEIGHTS = {
   mcpServer: 0.08,
   integrationGuides: 0.08,
   machineReadableSitemaps: 0.07,
+};
+
+export const ADAPTIVE_AEO_WEIGHTS: Record<SiteType, Record<string, number>> = {
+  'saas-api': AEO_WEIGHTS,
+  'ecommerce': {
+    productSchema: 0.15,
+    reviewMarkup: 0.12,
+    inventorySignals: 0.08,
+    merchantFeed: 0.10,
+    comparisonContent: 0.12,
+    customerEvidence: 0.10,
+    purchaseSimplicity: 0.08,
+    llmsTxt: 0.05,
+    machineReadableSitemaps: 0.07,
+    faqContent: 0.08,
+    categoryTaxonomy: 0.05,
+  },
+  'local-business': {
+    localSchema: 0.15,
+    napConsistency: 0.12,
+    reviewPresence: 0.12,
+    servicePages: 0.10,
+    locationSignals: 0.10,
+    contactAccessibility: 0.08,
+    trustSignals: 0.08,
+    llmsTxt: 0.05,
+    machineReadableSitemaps: 0.07,
+    localContent: 0.08,
+    photoEvidence: 0.05,
+  },
+  'content-publisher': {
+    authorCredentials: 0.15,
+    contentTaxonomy: 0.12,
+    publishingCadence: 0.10,
+    syndicationReadiness: 0.10,
+    originalReporting: 0.12,
+    sourceCitation: 0.10,
+    llmsTxt: 0.05,
+    machineReadableSitemaps: 0.07,
+    archiveDiscoverability: 0.07,
+    multimediaIntegration: 0.07,
+    newsletterPresence: 0.05,
+  },
+  'general': {
+    documentationStructure: 0.25,
+    llmsTxt: 0.15,
+    machineReadableSitemaps: 0.15,
+    contentQuality: 0.25,
+    trustSignals: 0.20,
+  },
+};
+
+export const GEO_AEO_SPLIT: Record<SiteType, { geo: number; aeo: number }> = {
+  'saas-api': { geo: 0.50, aeo: 0.50 },
+  'ecommerce': { geo: 0.55, aeo: 0.45 },
+  'local-business': { geo: 0.65, aeo: 0.35 },
+  'content-publisher': { geo: 0.70, aeo: 0.30 },
+  'general': { geo: 0.60, aeo: 0.40 },
 };

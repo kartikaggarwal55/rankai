@@ -1,7 +1,7 @@
 @import "tailwindcss";
 
-@theme inline {
-  /* Deep navy palette - calmer and more premium than pure charcoal (research: Vercel/Linear) */
+@theme {
+  /* Deep navy palette — dark theme defaults */
   --color-bg: #080b12;
   --color-bg-subtle: #0c1120;
   --color-bg-card: #111827;
@@ -12,21 +12,23 @@
   --color-border-bright: rgba(255, 255, 255, 0.10);
   --color-border-focus: rgba(99, 102, 241, 0.5);
 
-  --color-text: #f8fafc;
+  --color-text: #e2e8f0;
   --color-text-secondary: #8895a7;
   --color-text-muted: #475569;
 
-  /* Accent - indigo-blue, inspired by Linear's restrained accent approach */
+  /* Accent — indigo-blue */
   --color-accent: #6366f1;
   --color-accent-light: #818cf8;
   --color-accent-dim: rgba(99, 102, 241, 0.15);
 
-  /* Scoring colors - perceptually balanced */
+  /* Scoring colors */
   --color-score-pass: #34d399;
   --color-score-warn: #fbbf24;
+  --color-score-caution: #fb923c;
   --color-score-fail: #f87171;
   --color-score-pass-dim: rgba(52, 211, 153, 0.12);
   --color-score-warn-dim: rgba(251, 191, 36, 0.12);
+  --color-score-caution-dim: rgba(251, 146, 60, 0.12);
   --color-score-fail-dim: rgba(248, 113, 113, 0.12);
 
   --color-success: #34d399;
@@ -39,11 +41,19 @@
   --color-geo-dim: rgba(167, 139, 250, 0.12);
   --color-aeo-dim: rgba(96, 165, 250, 0.12);
 
-  /* Typography - Geist (Vercel), research: the modern standard for dev tools */
+  /* Track — used for progress bar backgrounds, SVG ring tracks */
+  --color-track: rgba(255, 255, 255, 0.06);
+
+  /* Hero gradient stops */
+  --color-gradient-start: #818cf8;
+  --color-gradient-mid: #60a5fa;
+  --color-gradient-end: #34d399;
+
+  /* Typography */
   --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   --font-mono: var(--font-geist-mono), 'SF Mono', ui-monospace, monospace;
 
-  /* Radius - 12px standard per 2026 trends (research: Linear, Stripe) */
+  /* Radius */
   --radius-sm: 8px;
   --radius-md: 12px;
   --radius-lg: 16px;
@@ -51,12 +61,73 @@
   --radius-full: 9999px;
 }
 
+/* ── Light theme overrides ──────────────────────────────────────────── */
+html.light {
+  --color-bg: #f8fafc;
+  --color-bg-subtle: #f1f5f9;
+  --color-bg-card: #ffffff;
+  --color-bg-elevated: #f1f5f9;
+  --color-bg-hover: #e2e8f0;
+
+  --color-border: rgba(0, 0, 0, 0.12);
+  --color-border-bright: rgba(0, 0, 0, 0.18);
+
+  --color-text: #0f172a;
+  --color-text-secondary: #475569;
+  --color-text-muted: #64748b;
+
+  /* Darker accent for light bg contrast */
+  --color-accent: #4f46e5;
+  --color-accent-light: #4338ca;
+  --color-accent-dim: rgba(79, 70, 229, 0.10);
+
+  /* Darker score colors for legibility on light bg */
+  --color-score-pass: #059669;
+  --color-score-warn: #d97706;
+  --color-score-caution: #ea580c;
+  --color-score-fail: #dc2626;
+  --color-score-pass-dim: rgba(5, 150, 105, 0.10);
+  --color-score-warn-dim: rgba(217, 119, 6, 0.10);
+  --color-score-caution-dim: rgba(234, 88, 12, 0.10);
+  --color-score-fail-dim: rgba(220, 38, 38, 0.10);
+
+  /* Darker semantic */
+  --color-success: #059669;
+  --color-warning: #d97706;
+  --color-danger: #dc2626;
+  --color-info: #2563eb;
+
+  /* Darker type colors */
+  --color-geo: #7c3aed;
+  --color-aeo: #2563eb;
+  --color-geo-dim: rgba(124, 58, 237, 0.10);
+  --color-aeo-dim: rgba(37, 99, 235, 0.10);
+
+  --color-track: rgba(0, 0, 0, 0.06);
+
+  /* Darker gradient stops for light bg */
+  --color-gradient-start: #4f46e5;
+  --color-gradient-mid: #2563eb;
+  --color-gradient-end: #059669;
+}
+
+/* ── Base ────────────────────────────────────────────────────────────── */
 * {
   box-sizing: border-box;
 }
 
 html {
   color-scheme: dark;
+  --nav-bg: rgba(8, 11, 18, 0.85);
+  --scrollbar-thumb: rgba(255, 255, 255, 0.08);
+  --scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);
+}
+
+html.light {
+  color-scheme: light;
+  --nav-bg: rgba(248, 250, 252, 0.85);
+  --scrollbar-thumb: rgba(0, 0, 0, 0.08);
+  --scrollbar-thumb-hover: rgba(0, 0, 0, 0.15);
 }
 
 body {
@@ -65,6 +136,7 @@ body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 200ms ease, color 200ms ease;
 }
 
 ::selection {
@@ -72,13 +144,19 @@ body {
   color: white;
 }
 
-/* Scrollbar - minimal, Linear-style */
+/* Scrollbar — minimal, Linear-style */
 ::-webkit-scrollbar { width: 5px; height: 5px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--scrollbar-thumb-hover); }
 
-/* Animations */
+/* Dot grid background pattern */
+.dot-grid {
+  background-image: radial-gradient(circle, var(--color-track) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* ── Animations ──────────────────────────────────────────────────────── */
 @keyframes scoreRingFill {
   from { stroke-dashoffset: 283; }
 }
@@ -114,8 +192,34 @@ body {
 }
 
 @keyframes stepperPulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
-  50% { box-shadow: 0 0 16px 4px rgba(99, 102, 241, 0.25); }
+  0%, 100% { box-shadow: 0 0 0 0 transparent; }
+  50% { box-shadow: 0 0 16px 4px color-mix(in srgb, var(--color-accent) 25%, transparent); }
+}
+
+/* Analyze button glow — theme-aware */
+.analyze-glow:hover {
+  box-shadow: 0 0 24px color-mix(in srgb, var(--color-accent) 35%, transparent);
+}
+
+/* Tab scroll indicator — gradient fade masks */
+.tab-scroll-container {
+  mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent);
+}
+
+/* ── Mobile fixes ──────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .issue-summary-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .issue-summary-bar > div {
+    flex: 1 1 40%;
+  }
+  .score-hero-center svg {
+    width: 140px !important;
+    height: 140px !important;
+  }
 }
 
 /* Respect reduced motion */
@@ -124,5 +228,64 @@ body {
     animation-duration: 0.01ms !important;
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Print stylesheet ──────────────────────────────────────────────── */
+@media print {
+  /* Force light theme */
+  :root {
+    --color-bg: #ffffff !important;
+    --color-bg-card: #ffffff !important;
+    --color-bg-elevated: #f8fafc !important;
+    --color-text: #0f172a !important;
+    --color-text-secondary: #475569 !important;
+    --color-text-muted: #64748b !important;
+    --color-border: rgba(0, 0, 0, 0.12) !important;
+    --color-accent: #4f46e5 !important;
+    --color-accent-light: #4338ca !important;
+    --color-track: rgba(0, 0, 0, 0.06) !important;
+    --color-score-pass: #059669 !important;
+    --color-score-warn: #d97706 !important;
+    --color-score-caution: #ea580c !important;
+    --color-score-fail: #dc2626 !important;
+    --color-geo: #7c3aed !important;
+    --color-aeo: #2563eb !important;
+  }
+
+  body {
+    background: white !important;
+    color: #0f172a !important;
+  }
+
+  /* Hide nav, footer, input area, tab navigation */
+  nav, footer, [data-print-hide] {
+    display: none !important;
+  }
+
+  /* Hide the hero/input section */
+  header {
+    display: none !important;
+  }
+
+  /* Add report header */
+  .print-header::before {
+    content: 'RankAI Analysis Report';
+    display: block;
+    font-size: 24px;
+    font-weight: bold;
+    padding: 20px 0;
+    border-bottom: 2px solid #e2e8f0;
+    margin-bottom: 20px;
+  }
+
+  /* Reset animations */
+  * {
+    animation: none !important;
+  }
+
+  /* Prevent page breaks inside cards */
+  .rounded-xl {
+    break-inside: avoid;
   }
 }

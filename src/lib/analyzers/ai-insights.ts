@@ -1,18 +1,37 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { GEOAnalysis, AEOAnalysis, Recommendation } from '../types';
+import { GEOAnalysis, AEOAnalysis, Recommendation, SiteType } from '../types';
+import { getPercentile, BENCHMARKS } from '../benchmarks';
+
+const SITE_TYPE_BENCHMARKS: Record<SiteType, string> = {
+  'saas-api': 'Stripe, Twilio, and Neon',
+  'ecommerce': 'Amazon, Shopify product pages, and Wirecutter reviews',
+  'local-business': 'top-ranking local competitors and Google Business Profile best practices',
+  'content-publisher': 'HubSpot, Healthline, and NerdWallet',
+  'general': 'leading sites in your industry',
+};
+
+const SITE_TYPE_LABELS: Record<SiteType, string> = {
+  'saas-api': 'SaaS/API platform',
+  'ecommerce': 'e-commerce site',
+  'local-business': 'local business',
+  'content-publisher': 'content publisher',
+  'general': 'website',
+};
 
 export async function generateAIInsights(
   url: string,
   geoScore: number,
   aeoScore: number,
+  overallScore: number,
   geo: GEOAnalysis,
   aeo: AEOAnalysis,
   topRecommendations: Recommendation[],
-  pagesAnalyzed: number
+  pagesAnalyzed: number,
+  siteType: SiteType
 ): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return generateFallbackInsights(url, geoScore, aeoScore, geo, aeo, topRecommendations);
+    return generateFallbackInsights(url, geoScore, aeoScore, overallScore, geo, aeo, topRecommendations, siteType);
   }
 
   try {
@@ -30,9 +49,15 @@ export async function generateAIInsights(
       .map((r, i) => `  ${i + 1}. [${r.priority.toUpperCase()}] ${r.category}: ${r.title}`)
       .join('\n');
 
+    const percentile = getPercentile(overallScore, siteType);
+    const benchmark = BENCHMARKS[siteType];
+    const benchmarkRef = SITE_TYPE_BENCHMARKS[siteType];
+    const typeLabel = SITE_TYPE_LABELS[siteType];
+
     const prompt = `You are an expert in Generative Engine Optimization (GEO) and Agentic Engine Optimization (AEO). Analyze this website audit and provide actionable strategic insights.
 
 Website: ${url}
+Detected Site Type: ${typeLabel}
 Pages Analyzed: ${pagesAnalyzed}
 
 GEO Score: ${geoScore}/100
@@ -41,18 +66,21 @@ ${geoBreakdown}
 AEO Score: ${aeoScore}/100
 ${aeoBreakdown}
 
+Overall Score: ${overallScore}/100
+Percentile: Top ${100 - percentile}% of ${typeLabel}s (median: ${benchmark.median}, top 10%: ${benchmark.top10})
+
 Top Recommendations Already Generated:
 ${topRecs}
 
 Based on this data, provide a concise but comprehensive strategic analysis in markdown format covering:
 
-1. **Executive Summary** (2-3 sentences on overall AI-readiness)
+1. **Executive Summary** (2-3 sentences on overall AI-readiness, mention the percentile ranking)
 2. **Biggest Opportunities** — the 3-5 highest-impact actions ranked by effort-to-impact ratio, with specific implementation guidance
 3. **Quick Wins** — things that can be done in under a day to immediately improve scores
-4. **Strategic Gaps** — what's missing from a competitive standpoint relative to platforms like Neon, Supabase, and Stripe that excel at GEO/AEO
-5. **90-Day Roadmap** — a phased improvement plan
+4. **Strategic Gaps** — what's missing from a competitive standpoint relative to ${benchmarkRef} that excel at GEO/AEO
+5. **90-Day Roadmap** — a phased improvement plan tailored for a ${typeLabel}
 
-Be specific and actionable. Reference actual scores. Don't repeat the raw data — interpret it. Write for a technical product/engineering leader.`;
+Be specific and actionable. Reference actual scores and the benchmark context. Don't repeat the raw data — interpret it. Write for a technical product/engineering leader.`;
 
     const response = await client.messages.create({
       model: 'claude-sonnet-4-5-20250929',
@@ -61,10 +89,10 @@ Be specific and actionable. Reference actual scores. Don't repeat the raw data �
     });
 
     const textContent = response.content.find(c => c.type === 'text');
-    return textContent?.text || generateFallbackInsights(url, geoScore, aeoScore, geo, aeo, topRecommendations);
+    return textContent?.text || generateFallbackInsights(url, geoScore, aeoScore, overallScore, geo, aeo, topRecommendations, siteType);
   } catch (error) {
     console.error('AI insights generation failed:', error);
-    return generateFallbackInsights(url, geoScore, aeoScore, geo, aeo, topRecommendations);
+    return generateFallbackInsights(url, geoScore, aeoScore, overallScore, geo, aeo, topRecommendations, siteType);
   }
 }
 
@@ -72,9 +100,11 @@ function generateFallbackInsights(
   url: string,
   geoScore: number,
   aeoScore: number,
+  overallScore: number,
   geo: GEOAnalysis,
   aeo: AEOAnalysis,
-  topRecommendations: Recommendation[]
+  topRecommendations: Recommendation[],
+  siteType: SiteType
 ): string {
   const weakestGEO = Object.entries(geo)
     .sort(([, a], [, b]) => a.score - b.score)
@@ -89,9 +119,14 @@ function generateFallbackInsights(
   const criticalRecs = topRecommendations.filter(r => r.priority === 'critical').slice(0, 3);
   const quickWins = topRecommendations.filter(r => r.effort === 'low').slice(0, 3);
 
+  const percentile = getPercentile(overallScore, siteType);
+  const benchmark = BENCHMARKS[siteType];
+  const benchmarkRef = SITE_TYPE_BENCHMARKS[siteType];
+  const typeLabel = SITE_TYPE_LABELS[siteType];
+
   return `## Executive Summary
 
-${url} scores **${geoScore}/100** for Generative Engine Optimization and **${aeoScore}/100** for Agentic Engine Optimization. ${
+${url} scores **${geoScore}/100** for Generative Engine Optimization and **${aeoScore}/100** for Agentic Engine Optimization, placing it in the **top ${100 - percentile}%** of ${typeLabel}s (median: ${benchmark.median}, top 10%: ${benchmark.top10}). ${
     geoScore >= 70 ? 'GEO performance is solid' : geoScore >= 50 ? 'GEO has significant room for improvement' : 'GEO needs urgent attention'
   } and ${
     aeoScore >= 70 ? 'AEO readiness is strong' : aeoScore >= 50 ? 'AEO requires meaningful investment' : 'AEO is critically underdeveloped'
@@ -109,7 +144,7 @@ ${quickWins.map((r, i) => `${i + 1}. **${r.category}**: ${r.description}`).join(
 
 ## Strategic Gaps
 
-Leading platforms like Neon, Supabase, and Stripe excel through: MCP servers for dynamic AI agent discovery, comprehensive llms.txt files, AI rules files (.cursor/rules, CLAUDE.md), one-command onboarding, and massive community content presence. Compare your scores against these benchmarks to identify the most impactful investments.
+Leading ${typeLabel}s like ${benchmarkRef} excel through comprehensive AI-readiness strategies. Compare your scores against these benchmarks to identify the most impactful investments. Key gaps to close: schema markup completeness, structured content for AI extraction, and machine-readable documentation.
 
 ## 90-Day Roadmap
 
@@ -117,9 +152,9 @@ Leading platforms like Neon, Supabase, and Stripe excel through: MCP servers for
 
 **Week 3-4 (Content):** Add statistics, expert quotations, and source citations to key pages. Restructure content with answer capsules.
 
-**Month 2 (Infrastructure):** Build MCP server, publish OpenAPI spec, create AI rules files, improve quickstart guide.
+**Month 2 (Infrastructure):** Improve content structure, build comprehensive documentation, enhance E-E-A-T signals.
 
-**Month 3 (Authority):** Launch community content program, create original research, expand integration guides, build multi-platform presence.`;
+**Month 3 (Authority):** Launch content optimization program, create original research, expand presence across AI platforms.`;
 }
 
 function formatKey(key: string): string {

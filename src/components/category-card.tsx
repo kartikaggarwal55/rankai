@@ -14,7 +14,7 @@ interface CategoryCardProps {
 export function CategoryCard({ name, category, type }: CategoryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const color = getScoreColor(category.score);
-  const typeColor = type === 'geo' ? '#a78bfa' : '#60a5fa';
+  const typeColor = type === 'geo' ? 'var(--color-geo)' : 'var(--color-aeo)';
 
   return (
     <div className={`rounded-xl bg-bg-card overflow-hidden transition-all ${
@@ -30,13 +30,13 @@ export function CategoryCard({ name, category, type }: CategoryCardProps) {
             <h3 className="font-semibold text-text text-[15px] truncate">{name}</h3>
             <span
               className="text-[9px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-widest shrink-0"
-              style={{ background: `${typeColor}12`, color: typeColor }}
+              style={{ background: `color-mix(in srgb, ${typeColor} 7%, transparent)`, color: typeColor }}
             >
               {type.toUpperCase()}
             </span>
           </div>
           <div className="flex items-center gap-3 mt-2">
-            <div className="flex-1 h-1 bg-white/[0.04] rounded-full overflow-hidden">
+            <div className="flex-1 h-1 bg-track rounded-full overflow-hidden">
               <div
                 className="h-full rounded-full transition-all duration-1000"
                 style={{ width: `${category.score}%`, background: color }}
@@ -51,7 +51,7 @@ export function CategoryCard({ name, category, type }: CategoryCardProps) {
       </button>
 
       {expanded && (
-        <div className="border-t border-white/[0.04] px-5 py-4 space-y-4" style={{ animation: 'fadeIn 0.2s ease-out' }}>
+        <div className="border-t border-border px-5 py-4 space-y-4" style={{ animation: 'fadeIn 0.2s ease-out' }}>
           {/* Findings */}
           <div className="space-y-1.5">
             <h4 className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-muted mb-2">Findings</h4>
@@ -87,7 +87,7 @@ export function CategoryCard({ name, category, type }: CategoryCardProps) {
 
           {/* Recommendations */}
           {category.recommendations.length > 0 && (
-            <div className="space-y-1.5 pt-3 border-t border-white/[0.04]">
+            <div className="space-y-1.5 pt-3 border-t border-border">
               <h4 className="text-[10px] font-bold uppercase tracking-[0.1em] text-text-muted mb-2">Recommendations</h4>
               {category.recommendations.map((rec, i) => (
                 <div key={i} className="flex items-start gap-2.5 py-1.5 px-3">

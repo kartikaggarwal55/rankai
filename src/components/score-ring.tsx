@@ -16,7 +16,6 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
   const circumference = 2 * Math.PI * radius;
   const offset = circumference - (score / 100) * circumference;
   const color = getScoreColor(score);
-  const trackOpacity = 0.06;
 
   useEffect(() => {
     if (delay > 0) {
@@ -42,21 +41,21 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
           <circle
             cx="50" cy="50" r={radius}
             fill="none"
-            stroke={`rgba(255,255,255,${trackOpacity})`}
             strokeWidth="6"
+            style={{ stroke: 'var(--color-track)' }}
           />
           {/* Score arc */}
           <circle
             cx="50" cy="50" r={radius}
             fill="none"
-            stroke={color}
             strokeWidth="6"
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
             style={{
+              stroke: color,
               animation: 'scoreRingFill 1.8s cubic-bezier(0.16, 1, 0.3, 1) forwards',
-              filter: `drop-shadow(0 0 10px ${color}50)`,
+              filter: `drop-shadow(0 0 10px color-mix(in srgb, ${color} 31%, transparent))`,
             }}
           />
         </svg>
@@ -64,7 +63,7 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
           <span className="font-mono text-3xl font-bold tracking-tight" style={{ color }}>{score}</span>
           <span
             className="text-[10px] font-bold px-2 py-0.5 rounded-md mt-1 tracking-wide"
-            style={{ background: `${color}15`, color }}
+            style={{ background: `color-mix(in srgb, ${color} 8%, transparent)`, color }}
           >
             {grade}
           </span>
@@ -76,17 +75,17 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
 }
 
 export function getScoreColor(score: number): string {
-  if (score >= 80) return '#34d399';
-  if (score >= 60) return '#fbbf24';
-  if (score >= 40) return '#fb923c';
-  return '#f87171';
+  if (score >= 80) return 'var(--color-score-pass)';
+  if (score >= 60) return 'var(--color-score-warn)';
+  if (score >= 40) return 'var(--color-score-caution)';
+  return 'var(--color-score-fail)';
 }
 
 export function getGradeColor(grade: string): string {
-  if (grade.startsWith('A')) return '#34d399';
-  if (grade === 'B') return '#fbbf24';
-  if (grade === 'C') return '#fb923c';
-  return '#f87171';
+  if (grade.startsWith('A')) return 'var(--color-score-pass)';
+  if (grade === 'B') return 'var(--color-score-warn)';
+  if (grade === 'C') return 'var(--color-score-caution)';
+  return 'var(--color-score-fail)';
 }
 
 export function GradeBadge({ grade, size = 'md' }: { grade: string; size?: 'sm' | 'md' | 'lg' }) {
@@ -100,7 +99,7 @@ export function GradeBadge({ grade, size = 'md' }: { grade: string; size?: 'sm' 
   return (
     <span
       className={`inline-flex items-center justify-center rounded-lg font-mono font-bold ${sizeClasses[size]}`}
-      style={{ background: `${color}15`, color }}
+      style={{ background: `color-mix(in srgb, ${color} 8%, transparent)`, color }}
     >
       {grade}
     </span>
@@ -112,7 +111,7 @@ export function PositionLabel({ score }: { score: number }) {
   return (
     <span
       className="text-[10px] font-semibold px-2 py-0.5 rounded-full tracking-wide"
-      style={{ background: `${config.color}12`, color: config.color }}
+      style={{ background: `color-mix(in srgb, ${config.color} 7%, transparent)`, color: config.color }}
     >
       {config.label}
     </span>
@@ -120,8 +119,8 @@ export function PositionLabel({ score }: { score: number }) {
 }
 
 function getPositionConfig(score: number) {
-  if (score >= 80) return { label: 'Strong', color: '#34d399' };
-  if (score >= 60) return { label: 'Competitive', color: '#fbbf24' };
-  if (score >= 40) return { label: 'Developing', color: '#fb923c' };
-  return { label: 'At Risk', color: '#f87171' };
+  if (score >= 80) return { label: 'Strong', color: 'var(--color-score-pass)' };
+  if (score >= 60) return { label: 'Competitive', color: 'var(--color-score-warn)' };
+  if (score >= 40) return { label: 'Developing', color: 'var(--color-score-caution)' };
+  return { label: 'At Risk', color: 'var(--color-score-fail)' };
 }
