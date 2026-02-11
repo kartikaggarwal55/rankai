@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       send({ type: 'phase', phase: 'crawling', detail: `Discovered ${pageUrls.length} pages` });
 
       const crawlResults = [mainPage];
-      const subUrls = pageUrls.filter(u => u !== normalizedUrl);
+      const subUrls = pageUrls.filter(u => u !== normalizedUrl).slice(0, maxPages - 1);
       const batchSize = 5;
 
       for (let i = 0; i < subUrls.length; i += batchSize) {
@@ -126,6 +126,7 @@ export async function POST(request: NextRequest) {
 
       // Phase 5: GEO Analysis
       send({ type: 'phase', phase: 'analyzing-geo', detail: `Scoring ${crawlResults.length} pages across 11 GEO categories` });
+      await new Promise(r => setTimeout(r, 2000));
 
       const pageAnalyses: PageAnalysis[] = crawlResults.map(cr => ({
         url: cr.url,
@@ -137,6 +138,7 @@ export async function POST(request: NextRequest) {
 
       // Phase 6: AEO Analysis
       send({ type: 'phase', phase: 'analyzing-aeo', detail: `Evaluating AEO for ${siteType} site type` });
+      await new Promise(r => setTimeout(r, 2000));
 
       const aeo = analyzeAdaptiveAEO({
         allPages: crawlResults.map(cr => ({ url: cr.url, html: cr.html, title: cr.title })),

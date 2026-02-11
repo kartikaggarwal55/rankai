@@ -7,12 +7,12 @@ import {
   Share2, RotateCcw, ArrowLeft
 } from 'lucide-react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { SiteAnalysis, SiteType, ShareableResult } from '@/lib/types';
 import { ScoreRing, getScoreColor } from '@/components/score-ring';
 import { AuthButton } from '@/components/auth-button';
 import { ThemeToggle } from '@/components/theme-toggle';
-import { useSession } from 'next-auth/react';
+import { useSession, signIn } from 'next-auth/react';
 import {
   AnalysisResultsView,
   SITE_TYPE_LABELS,
@@ -24,7 +24,7 @@ import {
 
 const PIPELINE_STEPS = [
   { icon: Globe, title: 'Enter URL', desc: 'Paste any website URL to begin' },
-  { icon: Search, title: 'Crawl Pages', desc: 'We discover and scan up to 25 pages' },
+  { icon: Search, title: 'Crawl Pages', desc: 'We discover and scan your site\'s pages' },
   { icon: BarChart3, title: 'Score Criteria', desc: '23 checks across GEO and AEO' },
   { icon: Sparkles, title: 'AI Insights', desc: 'Claude generates your strategy' },
 ];
@@ -109,8 +109,24 @@ function HomeContent() {
   const [competitorUrls, setCompetitorUrls] = useState(['', '']);
   const [competitors, setCompetitors] = useState<(SiteAnalysis | null)[]>([null, null]);
   const [comparingPhases, setComparingPhases] = useState<(AnalysisPhase | null)[]>([null, null]);
+  const [maxPages, setMaxPages] = useState(25);
+  const [pagesOpen, setPagesOpen] = useState(false);
+  const router = useRouter();
   const resultsRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const pagesRef = useRef<HTMLDivElement>(null);
+
+  // Close pages popover on outside click
+  useEffect(() => {
+    if (!pagesOpen) return;
+    const handleClick = (e: MouseEvent) => {
+      if (pagesRef.current && !pagesRef.current.contains(e.target as Node)) {
+        setPagesOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, [pagesOpen]);
   const { data: session } = useSession();
   const searchParams = useSearchParams();
 
@@ -146,7 +162,7 @@ function HomeContent() {
     const response = await fetch('/api/analyze', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: targetUrl.trim() }),
+      body: JSON.stringify({ url: targetUrl.trim(), maxPages }),
     });
 
     if (!response.body) throw new Error('No response body');
@@ -200,24 +216,30 @@ function HomeContent() {
         setPhaseDetail(d);
       });
 
-      setAnalysis(data);
       setPhase('done');
+
+      // Signed-in: save and redirect to dashboard analysis page
+      if (session?.user) {
+        try {
+          const saveRes = await fetch('/api/analyses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ analysis: data }),
+          });
+          const { id } = await saveRes.json();
+          router.push(`/dashboard/analysis/${id}`);
+          return;
+        } catch {
+          // Fall through to show inline if save fails
+        }
+      }
+
+      // Unsigned-in: show preview inline
+      setAnalysis(data);
 
       // Encode shareable URL
       const hash = encodeShareableResult(data);
       window.history.replaceState(null, '', '#r=' + hash);
-
-      // Auto-save for authenticated users
-      if (session?.user) {
-        fetch('/api/analyses', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ analysis: data }),
-        }).then(() => {
-          setSavedToHistory(true);
-          setTimeout(() => setSavedToHistory(false), 3000);
-        }).catch(() => {});
-      }
 
       // Compare mode: analyze competitors in parallel
       if (compareMode) {
@@ -251,7 +273,7 @@ function HomeContent() {
   const isLoading = phase !== 'idle' && phase !== 'done' && phase !== 'error';
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen flex flex-col">
       {/* ── Sticky Nav ─────────────────────────────────────────────────── */}
       <nav
         className="sticky top-0 z-50 backdrop-blur-xl border-b border-border"
@@ -268,9 +290,7 @@ function HomeContent() {
             </div>
             <span className="text-base font-bold tracking-tight">RankAI</span>
           </Link>
-          <div className="flex items-center gap-6 text-sm text-text-secondary">
-            <a href="#how-it-works" className="hover:text-text transition-colors hidden sm:inline">How it Works</a>
-            <a href="#why-it-matters" className="hover:text-text transition-colors hidden sm:inline">Why It Matters</a>
+          <div className="flex items-center gap-3 text-sm text-text-secondary">
             {session?.user && (
               <Link
                 href="/dashboard"
@@ -335,23 +355,60 @@ function HomeContent() {
                   onChange={(e) => setUrl(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleAnalyze()}
                   placeholder="docs.stripe.com"
-                  className="w-full h-14 pl-12 pr-36 rounded-xl bg-bg-card border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none text-text placeholder-text-muted transition-all text-base"
+                  className="w-full h-14 pl-12 pr-44 rounded-xl bg-bg-card border border-border focus:border-accent/50 focus:ring-1 focus:ring-accent/20 outline-none text-text placeholder-text-muted transition-all text-base"
                   disabled={isLoading}
                 />
-                <button
-                  onClick={handleAnalyze}
-                  disabled={!url.trim() || isLoading}
-                  className="absolute right-1.5 h-11 px-6 rounded-[10px] bg-accent hover:bg-accent-light disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-[15px] transition-all flex items-center gap-2 analyze-glow cursor-pointer"
-                >
-                  {isLoading ? (
-                    <Loader2 size={16} className="animate-spin" />
-                  ) : (
-                    <>
-                      <span>{compareMode ? 'Compare All' : 'Analyze'}</span>
-                      <ArrowRight size={15} />
-                    </>
-                  )}
-                </button>
+                <div className="absolute right-1.5 flex items-center gap-1.5">
+                  {/* Pages selector */}
+                  <div ref={pagesRef} className="relative">
+                    <button
+                      onClick={() => setPagesOpen(!pagesOpen)}
+                      disabled={isLoading}
+                      className="h-11 px-3 rounded-[10px] bg-bg-elevated hover:bg-bg-hover border border-border text-text-secondary hover:text-text disabled:opacity-40 disabled:cursor-not-allowed text-xs font-mono font-medium transition-all flex items-center gap-1 cursor-pointer tabular-nums"
+                      title="Pages to crawl"
+                    >
+                      {maxPages}p
+                    </button>
+                    {pagesOpen && (
+                      <div
+                        className="absolute top-full right-0 mt-2 p-2 rounded-xl bg-bg-card border border-border shadow-lg min-w-[140px] z-50"
+                        style={{ animation: 'fadeIn 0.15s ease-out' }}
+                      >
+                        <p className="text-[10px] text-text-muted uppercase tracking-widest font-bold px-1 mb-1.5">Pages to crawl</p>
+                        <div className="grid grid-cols-2 gap-1">
+                          {[5, 10, 15, 25, 35, 50].map(n => (
+                            <button
+                              key={n}
+                              onClick={() => { setMaxPages(n); setPagesOpen(false); }}
+                              className={`px-2.5 py-1.5 rounded-lg text-xs font-mono font-medium transition-all cursor-pointer ${
+                                maxPages === n
+                                  ? 'bg-accent text-white'
+                                  : 'bg-bg-elevated text-text-secondary hover:text-text hover:bg-bg-hover'
+                              }`}
+                            >
+                              {n}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* Analyze button */}
+                  <button
+                    onClick={handleAnalyze}
+                    disabled={!url.trim() || isLoading}
+                    className="h-11 px-6 rounded-[10px] bg-accent hover:bg-accent-light disabled:opacity-40 disabled:cursor-not-allowed text-white font-semibold text-[15px] transition-all flex items-center gap-2 analyze-glow cursor-pointer"
+                  >
+                    {isLoading ? (
+                      <Loader2 size={16} className="animate-spin" />
+                    ) : (
+                      <>
+                        <span>{compareMode ? 'Compare All' : 'Analyze'}</span>
+                        <ArrowRight size={15} />
+                      </>
+                    )}
+                  </button>
+                </div>
               </div>
 
               {/* Compare mode toggle */}
@@ -618,28 +675,15 @@ function HomeContent() {
         </>
       )}
 
-      {/* ── Results ────────────────────────────────────────────────────── */}
+      {/* ── Results Preview (unsigned-in users) ────────────────────────── */}
       {analysis && (
         <div ref={resultsRef} className="max-w-6xl mx-auto px-6 pb-24">
-          {session?.user && (
-            <Link
-              href="/dashboard"
-              className="flex items-center gap-1.5 text-sm text-text-muted hover:text-text transition-colors mb-5"
-            >
-              <ArrowLeft size={14} />
-              Back to Dashboard
-            </Link>
-          )}
-          <AnalysisResultsView
-            analysis={analysis}
-            competitors={competitors.filter((c): c is SiteAnalysis => c !== null)}
-            savedToHistory={savedToHistory}
-          />
+          <UnsignedResultsPreview analysis={analysis} />
         </div>
       )}
 
       {/* ── Footer ─────────────────────────────────────────────────────── */}
-      <footer className="border-t border-border py-8 text-center">
+      <footer className="mt-auto border-t border-border py-8 text-center">
         <p className="text-xs text-text-muted">
           &copy; {new Date().getFullYear()} RankAI &mdash; Methodology based on Princeton GEO research (KDD 2024) and analysis of 680M+ AI citations.
         </p>
@@ -651,6 +695,87 @@ function HomeContent() {
 /* ── Helpers for SharedResultView ──────────────────────────────────── */
 function formatCategoryKey(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim();
+}
+
+/* ── Unsigned Results Preview ─────────────────────────────────────── */
+function UnsignedResultsPreview({ analysis }: { analysis: SiteAnalysis }) {
+  return (
+    <div style={{ animation: 'fadeInUp 0.4s ease-out' }}>
+      {/* Score rings */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
+        <div className="p-7 rounded-xl bg-bg-card border border-border flex flex-col items-center justify-center">
+          <ScoreRing score={analysis.geoScore} grade={analysis.geoGrade} size={120} label="GEO Score" />
+          <p className="text-xs text-text-muted mt-2">Generative Engine</p>
+        </div>
+        <div className="p-9 rounded-xl bg-bg-card border border-border flex flex-col items-center justify-center relative overflow-hidden">
+          <ScoreRing score={analysis.overallScore} grade={analysis.overallGrade} size={170} label="Overall Score" />
+          <p className="text-xs text-text-muted mt-2 font-mono">{analysis.pagesAnalyzed} pages &middot; {SITE_TYPE_LABELS[analysis.siteType] || analysis.siteType}</p>
+        </div>
+        <div className="p-7 rounded-xl bg-bg-card border border-border flex flex-col items-center justify-center">
+          <ScoreRing score={analysis.aeoScore} grade={analysis.aeoGrade} size={120} label="AEO Score" />
+          <p className="text-xs text-text-muted mt-2">Agentic Engine</p>
+        </div>
+      </div>
+
+      {/* Category bars */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-6">
+        <div className="p-7 rounded-xl bg-bg-card border border-border">
+          <h3 className="font-semibold text-base mb-4">GEO Categories</h3>
+          <div className="space-y-3">
+            {Object.entries(analysis.geo).map(([key, cat]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-sm text-text-secondary w-36 truncate">{formatCategoryKey(key)}</span>
+                <div className="flex-1 h-1.5 bg-track rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${cat.score}%`, background: getScoreColor(cat.score) }} />
+                </div>
+                <span className="text-xs font-mono text-text-muted w-7 text-right tabular-nums">{cat.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+        <div className="p-7 rounded-xl bg-bg-card border border-border">
+          <h3 className="font-semibold text-base mb-4">AEO Categories</h3>
+          <div className="space-y-3">
+            {Object.entries(analysis.aeo).map(([key, cat]) => (
+              <div key={key} className="flex items-center gap-3">
+                <span className="text-sm text-text-secondary w-36 truncate">{formatCategoryKey(key)}</span>
+                <div className="flex-1 h-1.5 bg-track rounded-full overflow-hidden">
+                  <div className="h-full rounded-full" style={{ width: `${cat.score}%`, background: getScoreColor(cat.score) }} />
+                </div>
+                <span className="text-xs font-mono text-text-muted w-7 text-right tabular-nums">{cat.score}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Sign-in CTA */}
+      <div className="relative rounded-2xl border border-accent/30 bg-gradient-to-b from-bg-card to-bg-subtle overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-t from-bg/90 via-bg/50 to-transparent pointer-events-none" />
+        <div className="relative px-8 py-12 flex flex-col items-center text-center">
+          <div className="w-12 h-12 rounded-xl bg-accent-dim flex items-center justify-center mb-4">
+            <Sparkles size={22} className="text-accent-light" />
+          </div>
+          <h3 className="text-xl font-bold tracking-tight mb-2">Sign in for the full report</h3>
+          <p className="text-sm text-text-secondary max-w-md mb-6 leading-relaxed">
+            Get AI-powered strategic recommendations, detailed scoring breakdowns, priority action items, and save your analyses to track progress over time.
+          </p>
+          <button
+            onClick={() => signIn('google')}
+            className="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-accent hover:bg-accent-light text-white font-semibold text-sm transition-all cursor-pointer analyze-glow"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24">
+              <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4" />
+              <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+              <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18A10.96 10.96 0 0 0 1 12c0 1.77.42 3.45 1.18 4.93l3.66-2.84z" fill="#FBBC05" />
+              <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+            </svg>
+            Sign in with Google
+          </button>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ── Shared Result View ───────────────────────────────────────────── */

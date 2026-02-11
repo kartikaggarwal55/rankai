@@ -118,6 +118,7 @@ html.light {
 
 html {
   color-scheme: dark;
+  scrollbar-gutter: stable;
   --nav-bg: rgba(8, 11, 18, 0.85);
   --scrollbar-thumb: rgba(255, 255, 255, 0.08);
   --scrollbar-thumb-hover: rgba(255, 255, 255, 0.15);

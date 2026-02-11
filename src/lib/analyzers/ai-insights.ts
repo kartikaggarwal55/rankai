@@ -83,8 +83,8 @@ Based on this data, provide a concise but comprehensive strategic analysis in ma
 Be specific and actionable. Reference actual scores and the benchmark context. Don't repeat the raw data — interpret it. Write for a technical product/engineering leader.`;
 
     const response = await client.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 2000,
+      model: 'claude-opus-4-6',
+      max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     });
 

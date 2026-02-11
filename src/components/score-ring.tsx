@@ -41,14 +41,14 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
           <circle
             cx="50" cy="50" r={radius}
             fill="none"
-            strokeWidth="6"
+            strokeWidth={size < 70 ? 8 : 6}
             style={{ stroke: 'var(--color-track)' }}
           />
           {/* Score arc */}
           <circle
             cx="50" cy="50" r={radius}
             fill="none"
-            strokeWidth="6"
+            strokeWidth={size < 70 ? 8 : 6}
             strokeLinecap="round"
             strokeDasharray={circumference}
             strokeDashoffset={offset}
@@ -60,13 +60,22 @@ export function ScoreRing({ score, grade, size = 120, label, delay = 0 }: ScoreR
           />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="font-mono text-3xl font-bold tracking-tight" style={{ color }}>{score}</span>
-          <span
-            className="text-[10px] font-bold px-2 py-0.5 rounded-md mt-1 tracking-wide"
-            style={{ background: `color-mix(in srgb, ${color} 8%, transparent)`, color }}
-          >
-            {grade}
-          </span>
+          <span className={`font-mono font-bold tracking-tight ${size >= 100 ? 'text-3xl' : size >= 70 ? 'text-xl' : 'text-base'}`} style={{ color }}>{score}</span>
+          {size >= 70 ? (
+            <span
+              className="text-[10px] font-bold px-2 py-0.5 rounded-md mt-1 tracking-wide"
+              style={{ background: `color-mix(in srgb, ${color} 8%, transparent)`, color }}
+            >
+              {grade}
+            </span>
+          ) : (
+            <span
+              className="text-[8px] font-bold leading-none"
+              style={{ color }}
+            >
+              {grade}
+            </span>
+          )}
         </div>
       </div>
       {label && <span className="text-[11px] text-text-secondary font-medium tracking-widest uppercase">{label}</span>}
@@ -119,8 +128,8 @@ export function PositionLabel({ score }: { score: number }) {
 }
 
 function getPositionConfig(score: number) {
-  if (score >= 80) return { label: 'Strong', color: 'var(--color-score-pass)' };
-  if (score >= 60) return { label: 'Competitive', color: 'var(--color-score-warn)' };
-  if (score >= 40) return { label: 'Developing', color: 'var(--color-score-caution)' };
-  return { label: 'At Risk', color: 'var(--color-score-fail)' };
+  if (score >= 80) return { label: 'Excellent', color: 'var(--color-score-pass)' };
+  if (score >= 60) return { label: 'Good', color: 'var(--color-score-warn)' };
+  if (score >= 40) return { label: 'Needs Work', color: 'var(--color-score-caution)' };
+  return { label: 'Poor', color: 'var(--color-score-fail)' };
 }

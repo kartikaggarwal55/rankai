@@ -4,9 +4,10 @@ import { useState } from 'react';
 import {
   Globe, Sparkles, Bot, FileText, BarChart3, Zap, ExternalLink,
   AlertTriangle, Clock, ArrowUp, TrendingUp, Share2, Download,
-  LayoutList, Grid3X3, Check
+  LayoutList, Grid3X3, Check, ChevronDown
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { SiteAnalysis, GEOAnalysis, AEOAnalysis, SiteType, ShareableResult } from '@/lib/types';
 import { ScoreRing, PositionLabel, getScoreColor } from '@/components/score-ring';
 import { CategoryCard } from '@/components/category-card';
@@ -90,6 +91,36 @@ export function AnalysisResultsView({
 
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
+      {/* URL bar + Issue summary */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
+        <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-bg-card border border-border flex-1 min-w-0">
+          <Globe size={16} className="text-text-muted shrink-0" />
+          <a href={analysis.url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent-light hover:underline truncate flex items-center gap-1.5">
+            {analysis.url}
+            <ExternalLink size={12} />
+          </a>
+          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest bg-accent-dim text-accent-light shrink-0">
+            {SITE_TYPE_LABELS[analysis.siteType]}
+          </span>
+          <span className="text-xs text-text-muted shrink-0 font-mono tabular-nums">
+            {new Date(analysis.crawledAt).toLocaleDateString()}
+          </span>
+          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+            {savedToHistory && (
+              <span className="text-[10px] text-score-pass font-medium" style={{ animation: 'fadeIn 0.3s ease-out' }}>Saved to history</span>
+            )}
+            <button onClick={handleShare} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer" title="Copy link">
+              {copied ? <Check size={14} className="text-score-pass" /> : <Share2 size={14} className="text-text-muted" />}
+            </button>
+            <button onClick={handleExport} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer print:hidden" title="Export report">
+              <Download size={14} className="text-text-muted" />
+            </button>
+          </div>
+        </div>
+
+        <IssueSummaryBar recommendations={analysis.topRecommendations} />
+      </div>
+
       {/* Score hero */}
       <div className="grid grid-cols-1 md:grid-cols-[1fr_1.4fr_1fr] gap-5 mb-6">
         <div className="p-7 rounded-xl bg-bg-card border border-border flex flex-col items-center justify-center">
@@ -120,36 +151,6 @@ export function AnalysisResultsView({
           <p className="text-xs text-text-muted mt-2">Agentic Engine</p>
           <p className="text-[10px] mt-1 font-medium" style={{ color: getScoreColor(analysis.aeoScore) }}>{getPercentileLabel(analysis.aeoScore, analysis.siteType)}</p>
         </div>
-      </div>
-
-      {/* URL bar + Issue summary */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-bg-card border border-border flex-1 min-w-0">
-          <Globe size={16} className="text-text-muted shrink-0" />
-          <a href={analysis.url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent-light hover:underline truncate flex items-center gap-1.5">
-            {analysis.url}
-            <ExternalLink size={12} />
-          </a>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest bg-accent-dim text-accent-light shrink-0">
-            {SITE_TYPE_LABELS[analysis.siteType]}
-          </span>
-          <span className="text-xs text-text-muted shrink-0 font-mono tabular-nums">
-            {new Date(analysis.crawledAt).toLocaleDateString()}
-          </span>
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            {savedToHistory && (
-              <span className="text-[10px] text-score-pass font-medium" style={{ animation: 'fadeIn 0.3s ease-out' }}>Saved to history</span>
-            )}
-            <button onClick={handleShare} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer" title="Copy link">
-              {copied ? <Check size={14} className="text-score-pass" /> : <Share2 size={14} className="text-text-muted" />}
-            </button>
-            <button onClick={handleExport} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer print:hidden" title="Export report">
-              <Download size={14} className="text-text-muted" />
-            </button>
-          </div>
-        </div>
-
-        <IssueSummaryBar recommendations={analysis.topRecommendations} />
       </div>
 
       {/* Tabs */}
@@ -323,15 +324,33 @@ function OverviewTab({ analysis }: { analysis: SiteAnalysis }) {
       </div>
 
       {/* Pages Analyzed */}
-      <div className="lg:col-span-2 p-7 rounded-xl bg-bg-card border border-border">
-        <div className="flex items-center gap-2.5 mb-6">
-          <div className="w-8 h-8 rounded-lg bg-accent-dim flex items-center justify-center">
-            <Globe size={16} className="text-accent-light" />
-          </div>
-          <h3 className="font-semibold text-base">Pages Analyzed</h3>
-          <span className="ml-auto text-xs font-mono text-text-muted tabular-nums">{analysis.pagesAnalyzed} pages</span>
+      <PagesAnalyzedAccordion analysis={analysis} />
+    </div>
+  );
+}
+
+/* -- Pages Analyzed Accordion -------------------------------------------- */
+function PagesAnalyzedAccordion({ analysis }: { analysis: SiteAnalysis }) {
+  const [pagesOpen, setPagesOpen] = useState(false);
+
+  return (
+    <div className="lg:col-span-2 p-7 rounded-xl bg-bg-card border border-border">
+      <button
+        onClick={() => setPagesOpen(!pagesOpen)}
+        className="w-full flex items-center gap-2.5 text-left cursor-pointer"
+      >
+        <div className="w-8 h-8 rounded-lg bg-accent-dim flex items-center justify-center">
+          <Globe size={16} className="text-accent-light" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+        <h3 className="font-semibold text-base">Pages Analyzed</h3>
+        <span className="ml-auto text-xs font-mono text-text-muted tabular-nums">{analysis.pagesAnalyzed} pages</span>
+        <ChevronDown
+          size={16}
+          className={`text-text-muted transition-transform duration-200 ${pagesOpen ? 'rotate-180' : ''}`}
+        />
+      </button>
+      {pagesOpen && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-6">
           {analysis.pageAnalyses.map((page, i) => {
             const geoScore = Math.round(
               Object.values(page.geo).reduce((sum, cat) => sum + cat.score * cat.weight, 0)
@@ -353,7 +372,7 @@ function OverviewTab({ analysis }: { analysis: SiteAnalysis }) {
             );
           })}
         </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -514,15 +533,27 @@ function InsightsTab({ insights }: { insights: string }) {
           <p className="text-xs text-text-muted">Generated from your complete GEO/AEO audit</p>
         </div>
       </div>
-      <div className="max-w-none text-[15px] leading-relaxed
+      <div className="max-w-none text-[15px] leading-relaxed text-text-secondary
+          [&_h1]:text-2xl [&_h1]:font-bold [&_h1]:text-text [&_h1]:mt-8 [&_h1]:mb-4 [&_h1]:tracking-tight
           [&_h2]:text-xl [&_h2]:font-bold [&_h2]:text-text [&_h2]:mt-8 [&_h2]:mb-3 [&_h2]:tracking-tight
           [&_h3]:text-base [&_h3]:font-semibold [&_h3]:text-text [&_h3]:mt-5 [&_h3]:mb-2
-          [&_p]:text-text-secondary [&_p]:mb-3 [&_p]:leading-relaxed
+          [&_h4]:text-sm [&_h4]:font-semibold [&_h4]:text-text [&_h4]:mt-4 [&_h4]:mb-1.5
+          [&_p]:mb-3 [&_p]:leading-relaxed
           [&_strong]:text-text [&_strong]:font-semibold
-          [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3 [&_ul]:text-text-secondary
-          [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3 [&_ol]:text-text-secondary
-          [&_li]:mb-1.5 [&_li]:leading-relaxed">
-        <ReactMarkdown>{insights}</ReactMarkdown>
+          [&_em]:italic
+          [&_a]:text-accent-light [&_a]:underline [&_a]:underline-offset-2
+          [&_ul]:list-disc [&_ul]:pl-5 [&_ul]:mb-3
+          [&_ol]:list-decimal [&_ol]:pl-5 [&_ol]:mb-3
+          [&_li]:mb-1.5 [&_li]:leading-relaxed
+          [&_li_ul]:mt-1.5 [&_li_ol]:mt-1.5
+          [&_code]:text-[13px] [&_code]:font-mono [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:rounded-md [&_code]:bg-bg-elevated [&_code]:text-accent-light
+          [&_pre]:my-4 [&_pre]:p-4 [&_pre]:rounded-lg [&_pre]:bg-bg-elevated [&_pre]:overflow-x-auto [&_pre_code]:bg-transparent [&_pre_code]:p-0 [&_pre_code]:text-text-secondary
+          [&_blockquote]:border-l-2 [&_blockquote]:border-accent/30 [&_blockquote]:pl-4 [&_blockquote]:my-4 [&_blockquote]:italic [&_blockquote]:text-text-muted
+          [&_hr]:border-border [&_hr]:my-6
+          [&_table]:w-full [&_table]:my-4 [&_table]:text-sm
+          [&_th]:text-left [&_th]:py-2 [&_th]:px-3 [&_th]:border-b [&_th]:border-border [&_th]:text-text [&_th]:font-semibold
+          [&_td]:py-2 [&_td]:px-3 [&_td]:border-b [&_td]:border-border/50">
+        <ReactMarkdown remarkPlugins={[remarkGfm]}>{insights}</ReactMarkdown>
       </div>
     </div>
   );
