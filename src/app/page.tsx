@@ -10,6 +10,7 @@ import { SiteAnalysis, GEOAnalysis, AEOAnalysis } from '@/lib/types';
 import { ScoreRing, PositionLabel, getScoreColor } from '@/components/score-ring';
 import { CategoryCard } from '@/components/category-card';
 import { RecommendationCard } from '@/components/recommendation-card';
+import { AuthButton } from '@/components/auth-button';
 
 type AnalysisPhase = 'idle' | 'crawling' | 'analyzing-geo' | 'analyzing-aeo' | 'generating-insights' | 'done' | 'error';
 
@@ -95,7 +96,7 @@ export default function Home() {
             </div>
             <div className="flex items-center gap-6 text-[13px] text-text-secondary">
               <a href="#how-it-works" className="hover:text-text transition-colors">How it Works</a>
-              <a href="#methodology" className="hover:text-text transition-colors">Methodology</a>
+              <AuthButton />
             </div>
           </nav>
 
@@ -252,15 +253,13 @@ export default function Home() {
             ))}
           </div>
 
-          {/* Methodology - research-backed stats */}
-          <div id="methodology" className="mt-20">
-            <h2 className="text-xl font-bold text-center mb-2 tracking-tight">Research-Backed Methodology</h2>
-            <p className="text-center text-text-secondary text-sm mb-10 max-w-lg mx-auto">
-              Grounded in the Princeton GEO paper (KDD 2024), analysis of 680M+ AI citations,
-              and patterns from top AI-adopted platforms.
-            </p>
+          {/* Stats grid */}
+          <p className="text-center text-text-secondary text-sm mt-12 mb-6 max-w-lg mx-auto">
+            Grounded in the Princeton GEO paper (KDD 2024), analysis of 680M+ AI citations,
+            and patterns from top AI-adopted platforms.
+          </p>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { stat: '25-37%', label: 'Visibility boost from adding statistics', icon: BarChart3 },
                 { stat: '3.2x', label: 'Higher citation rates for FAQ content', icon: Code2 },
@@ -272,7 +271,6 @@ export default function Home() {
                   <div className="text-[11px] text-text-secondary leading-snug">{stat.label}</div>
                 </div>
               ))}
-            </div>
           </div>
         </section>
       )}
