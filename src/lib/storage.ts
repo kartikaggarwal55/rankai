@@ -22,7 +22,10 @@ function ensureTable() {
       )
     `.then(() =>
       sql`CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses (user_id, created_at DESC)`
-    ).then(() => {});
+    ).then(() => {}).catch((err) => {
+      tableReady = null; // Reset so next call retries
+      throw err;
+    });
   }
   return tableReady;
 }
