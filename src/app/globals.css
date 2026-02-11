@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  /* Deep navy palette - calmer and more premium than pure charcoal (research: Vercel/Linear) */
+  --color-bg: #080b12;
+  --color-bg-subtle: #0c1120;
+  --color-bg-card: #111827;
+  --color-bg-elevated: #1a2236;
+  --color-bg-hover: #1e293b;
+
+  --color-border: rgba(255, 255, 255, 0.06);
+  --color-border-bright: rgba(255, 255, 255, 0.10);
+  --color-border-focus: rgba(99, 102, 241, 0.5);
+
+  --color-text: #f8fafc;
+  --color-text-secondary: #8895a7;
+  --color-text-muted: #475569;
+
+  /* Accent - indigo-blue, inspired by Linear's restrained accent approach */
+  --color-accent: #6366f1;
+  --color-accent-light: #818cf8;
+  --color-accent-dim: rgba(99, 102, 241, 0.15);
+
+  /* Scoring colors - perceptually balanced */
+  --color-score-pass: #34d399;
+  --color-score-warn: #fbbf24;
+  --color-score-fail: #f87171;
+  --color-score-pass-dim: rgba(52, 211, 153, 0.12);
+  --color-score-warn-dim: rgba(251, 191, 36, 0.12);
+  --color-score-fail-dim: rgba(248, 113, 113, 0.12);
+
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #f87171;
+  --color-info: #60a5fa;
+
+  --color-geo: #a78bfa;
+  --color-aeo: #60a5fa;
+  --color-geo-dim: rgba(167, 139, 250, 0.12);
+  --color-aeo-dim: rgba(96, 165, 250, 0.12);
+
+  /* Typography - Geist (Vercel), research: the modern standard for dev tools */
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-geist-mono), 'SF Mono', ui-monospace, monospace;
+
+  /* Radius - 12px standard per 2026 trends (research: Linear, Stripe) */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+* {
+  box-sizing: border-box;
+}
+
+html {
+  color-scheme: dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: var(--color-accent);
+  color: white;
+}
+
+/* Scrollbar - minimal, Linear-style */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+
+/* Animations */
+@keyframes scoreRingFill {
+  from { stroke-dashoffset: 283; }
+}
+
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes countUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(12px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes stepperPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(99, 102, 241, 0); }
+  50% { box-shadow: 0 0 16px 4px rgba(99, 102, 241, 0.25); }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
