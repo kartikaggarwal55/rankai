@@ -1,4 +1,6 @@
 import { NextRequest } from 'next/server';
+import { lookup } from 'node:dns/promises';
+import { isIP } from 'node:net';
 import { z } from 'zod';
 import { crawlPage, discoverPages, fetchRobotsTxt, fetchLlmsTxt, fetchLlmsFullTxt, fetchOpenApiSpec } from '@/lib/crawler';
 import { analyzeGEO } from '@/lib/analyzers/geo-analyzer';
@@ -9,11 +11,98 @@ import { generateAIInsights } from '@/lib/analyzers/ai-insights';
 import { PageAnalysis, GEO_AEO_SPLIT } from '@/lib/types';
 
 const RequestSchema = z.object({
-  url: z.string().url('Please enter a valid URL'),
-  maxPages: z.number().min(1).max(50).default(25),
+  url: z.string().trim().min(1, 'Please enter a valid URL'),
+  maxPages: z.coerce.number().min(1).max(50).default(25),
 });
 
-function createStream(emit: (event: object) => void, done: () => void) {
+const STREAM_HEADERS = {
+  'Content-Type': 'text/event-stream',
+  'Cache-Control': 'no-cache',
+  'Connection': 'keep-alive',
+};
+
+const INTERNAL_HOSTNAMES = new Set([
+  'localhost',
+  'host.docker.internal',
+  'metadata.google.internal',
+]);
+
+const INTERNAL_HOST_SUFFIXES = ['.localhost', '.local', '.internal', '.lan', '.home'];
+
+function normalizeUrl(rawUrl: string): string {
+  const candidate = rawUrl.trim();
+  const prefixed = /^https?:\/\//i.test(candidate) ? candidate : `https://${candidate}`;
+  let parsed: URL;
+  try {
+    parsed = new URL(prefixed);
+  } catch {
+    throw new Error('Please enter a valid URL');
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    throw new Error('Only HTTP(S) URLs are supported');
+  }
+
+  return parsed.toString();
+}
+
+function isPrivateIpv4(address: string): boolean {
+  const parts = address.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(Number.isNaN)) return false;
+  const [a, b] = parts;
+  if (a === 10 || a === 127 || a === 0) return true;
+  if (a === 169 && b === 254) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true;
+  if (a === 198 && (b === 18 || b === 19)) return true;
+  return false;
+}
+
+function isPrivateIpv6(address: string): boolean {
+  const normalized = address.toLowerCase().split('%')[0];
+  if (normalized === '::1') return true;
+  if (normalized.startsWith('fc') || normalized.startsWith('fd')) return true;
+  if (/^fe[89ab]/.test(normalized)) return true;
+  if (normalized.startsWith('::ffff:')) {
+    return isPrivateIpv4(normalized.slice(7));
+  }
+  return false;
+}
+
+function isPrivateIpAddress(address: string): boolean {
+  const version = isIP(address);
+  if (version === 4) return isPrivateIpv4(address);
+  if (version === 6) return isPrivateIpv6(address);
+  return false;
+}
+
+function isInternalHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/\.$/, '');
+  return INTERNAL_HOSTNAMES.has(normalized) || INTERNAL_HOST_SUFFIXES.some(suffix => normalized.endsWith(suffix));
+}
+
+async function isBlockedTarget(url: URL): Promise<boolean> {
+  const hostname = url.hostname;
+
+  if (isInternalHostname(hostname)) return true;
+  if (isPrivateIpAddress(hostname)) return true;
+
+  if (isIP(hostname) === 0) {
+    try {
+      const resolved = await lookup(hostname, { all: true, verbatim: true });
+      if (resolved.some(entry => isPrivateIpAddress(entry.address))) {
+        return true;
+      }
+    } catch {
+      // If DNS lookup fails, allow downstream fetch error handling to surface the issue.
+    }
+  }
+
+  return false;
+}
+
+function createStream() {
   const encoder = new TextEncoder();
   let controller: ReadableStreamDefaultController;
 
@@ -26,7 +115,6 @@ function createStream(emit: (event: object) => void, done: () => void) {
   const send = (event: object) => {
     try {
       controller.enqueue(encoder.encode(JSON.stringify(event) + '\n'));
-      emit(event);
     } catch { /* stream closed */ }
   };
 
@@ -34,7 +122,6 @@ function createStream(emit: (event: object) => void, done: () => void) {
     try {
       controller.close();
     } catch { /* already closed */ }
-    done();
   };
 
   return { stream, send, close };
@@ -47,7 +134,7 @@ export async function POST(request: NextRequest) {
   } catch {
     return new Response(
       JSON.stringify({ type: 'error', message: 'Invalid request body' }) + '\n',
-      { status: 400, headers: { 'Content-Type': 'text/event-stream' } }
+      { status: 400, headers: STREAM_HEADERS }
     );
   }
 
@@ -60,20 +147,39 @@ export async function POST(request: NextRequest) {
       : 'Invalid input';
     return new Response(
       JSON.stringify({ type: 'error', message: msg }) + '\n',
-      { status: 400, headers: { 'Content-Type': 'text/event-stream' } }
+      { status: 400, headers: STREAM_HEADERS }
     );
   }
 
   const { url, maxPages } = parsed;
 
-  let normalizedUrl = url;
-  if (!normalizedUrl.startsWith('http')) {
-    normalizedUrl = `https://${normalizedUrl}`;
+  let normalizedUrl: string;
+  try {
+    normalizedUrl = normalizeUrl(url);
+  } catch (error) {
+    return new Response(
+      JSON.stringify({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Please enter a valid URL',
+      }) + '\n',
+      { status: 400, headers: STREAM_HEADERS }
+    );
   }
 
-  const origin = new URL(normalizedUrl).origin;
+  const normalized = new URL(normalizedUrl);
+  if (await isBlockedTarget(normalized)) {
+    return new Response(
+      JSON.stringify({
+        type: 'error',
+        message: 'This URL points to a private/internal network target and cannot be analyzed.',
+      }) + '\n',
+      { status: 400, headers: STREAM_HEADERS }
+    );
+  }
 
-  const { stream, send, close } = createStream(() => {}, () => {});
+  const origin = normalized.origin;
+
+  const { stream, send, close } = createStream();
 
   (async () => {
     try {
@@ -98,7 +204,8 @@ export async function POST(request: NextRequest) {
 
       for (let i = 0; i < subUrls.length; i += batchSize) {
         const batch = subUrls.slice(i, i + batchSize);
-        send({ type: 'phase', phase: 'crawling', detail: `Crawling page ${Math.min(i + batchSize, subUrls.length) + 1}/${pageUrls.length}` });
+        const lastInBatch = Math.min(i + batch.length, subUrls.length);
+        send({ type: 'phase', phase: 'crawling', detail: `Crawling pages ${i + 1}-${lastInBatch} of ${subUrls.length}` });
         const results = await Promise.allSettled(batch.map(u => crawlPage(u)));
         for (const result of results) {
           if (result.status === 'fulfilled' && result.value.statusCode < 400) {
@@ -106,6 +213,7 @@ export async function POST(request: NextRequest) {
           }
         }
       }
+      send({ type: 'phase', phase: 'crawling', detail: `Successfully crawled ${crawlResults.length} pages` });
 
       // Phase 3: Fetch site-level resources
       send({ type: 'phase', phase: 'crawling', detail: 'Fetching robots.txt, llms.txt, OpenAPI spec...' });
@@ -126,7 +234,6 @@ export async function POST(request: NextRequest) {
 
       // Phase 5: GEO Analysis
       send({ type: 'phase', phase: 'analyzing-geo', detail: `Scoring ${crawlResults.length} pages across 11 GEO categories` });
-      await new Promise(r => setTimeout(r, 2000));
 
       const pageAnalyses: PageAnalysis[] = crawlResults.map(cr => ({
         url: cr.url,
@@ -138,7 +245,6 @@ export async function POST(request: NextRequest) {
 
       // Phase 6: AEO Analysis
       send({ type: 'phase', phase: 'analyzing-aeo', detail: `Evaluating AEO for ${siteType} site type` });
-      await new Promise(r => setTimeout(r, 2000));
 
       const aeo = analyzeAdaptiveAEO({
         allPages: crawlResults.map(cr => ({ url: cr.url, html: cr.html, title: cr.title })),
@@ -190,10 +296,6 @@ export async function POST(request: NextRequest) {
   })();
 
   return new Response(stream, {
-    headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
-      'Connection': 'keep-alive',
-    },
+    headers: STREAM_HEADERS,
   });
 }

@@ -89,6 +89,59 @@ function decodeShareableResult(hash: string): ShareableResult | null {
   }
 }
 
+const PENDING_ANALYSIS_KEY = 'rankai:pending-analysis';
+
+type PendingAnalysisPayload =
+  | { kind: 'single'; primary: SiteAnalysis }
+  | { kind: 'comparison'; primary: SiteAnalysis; competitors: SiteAnalysis[] };
+
+function savePendingAnalysis(payload: PendingAnalysisPayload) {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(PENDING_ANALYSIS_KEY, JSON.stringify(payload));
+}
+
+function loadPendingAnalysis(): PendingAnalysisPayload | null {
+  if (typeof window === 'undefined') return null;
+  const raw = localStorage.getItem(PENDING_ANALYSIS_KEY);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>;
+
+      // Backward compatibility for older payloads that stored only SiteAnalysis.
+      if (typeof record.url === 'string' && typeof record.overallScore === 'number') {
+        return { kind: 'single', primary: record as unknown as SiteAnalysis };
+      }
+
+      if (record.kind === 'single' && record.primary && typeof record.primary === 'object') {
+        return { kind: 'single', primary: record.primary as SiteAnalysis };
+      }
+
+      if (
+        record.kind === 'comparison' &&
+        record.primary &&
+        typeof record.primary === 'object' &&
+        Array.isArray(record.competitors)
+      ) {
+        return {
+          kind: 'comparison',
+          primary: record.primary as SiteAnalysis,
+          competitors: record.competitors as SiteAnalysis[],
+        };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function clearPendingAnalysis() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(PENDING_ANALYSIS_KEY);
+}
+
 export default function Home() {
   return (
     <Suspense>
@@ -109,6 +162,7 @@ function HomeContent() {
   const [competitorUrls, setCompetitorUrls] = useState(['', '']);
   const [competitors, setCompetitors] = useState<(SiteAnalysis | null)[]>([null, null]);
   const [comparingPhases, setComparingPhases] = useState<(AnalysisPhase | null)[]>([null, null]);
+  const [isPersistingPending, setIsPersistingPending] = useState(false);
   const [maxPages, setMaxPages] = useState(25);
   const [pagesOpen, setPagesOpen] = useState(false);
   const router = useRouter();
@@ -157,6 +211,98 @@ function HomeContent() {
         .catch(() => {});
     }
   }, [searchParams, session]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveAnalysisForUser = async (analysisToSave: SiteAnalysis): Promise<string> => {
+    const saveRes = await fetch('/api/analyses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analysis: analysisToSave }),
+    });
+    if (!saveRes.ok) {
+      throw new Error('Failed to save analysis');
+    }
+    const payload = await saveRes.json();
+    if (!payload?.id || typeof payload.id !== 'string') {
+      throw new Error('Failed to save analysis');
+    }
+    return payload.id;
+  };
+
+  const saveComparisonForUser = async (primaryAnalysisId: string, competitorAnalysisIds: string[]): Promise<string> => {
+    const saveRes = await fetch('/api/comparisons', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ primaryAnalysisId, competitorAnalysisIds }),
+    });
+    if (!saveRes.ok) {
+      throw new Error('Failed to save comparison');
+    }
+    const payload = await saveRes.json();
+    if (!payload?.id || typeof payload.id !== 'string') {
+      throw new Error('Failed to save comparison');
+    }
+    return payload.id;
+  };
+
+  // Persist a signed-out run immediately after login so users never need to re-run.
+  useEffect(() => {
+    if (!session?.user || analysis) return;
+    const pending = loadPendingAnalysis();
+    if (!pending) return;
+
+    let cancelled = false;
+    setIsPersistingPending(true);
+    setPhase('generating-insights');
+    setPhaseDetail('Saving your recent analysis to your account...');
+
+    (async () => {
+      try {
+        const primaryId = await saveAnalysisForUser(pending.primary);
+
+        if (pending.kind === 'comparison' && pending.competitors.length > 0) {
+          const competitorIds = await Promise.all(pending.competitors.map(site => saveAnalysisForUser(site)));
+          if (competitorIds.length > 0) {
+            const comparisonId = await saveComparisonForUser(primaryId, competitorIds);
+            clearPendingAnalysis();
+            if (!cancelled) {
+              setSavedToHistory(true);
+              setIsPersistingPending(false);
+              router.push(`/dashboard/comparison/${comparisonId}`);
+            }
+            return;
+          }
+        }
+
+        clearPendingAnalysis();
+        if (!cancelled) {
+          setSavedToHistory(true);
+          setIsPersistingPending(false);
+          router.push(`/dashboard/analysis/${primaryId}`);
+        }
+        return;
+      } catch {
+        // If save fails, still show the existing result without forcing a rerun.
+      }
+
+      if (!cancelled) {
+        clearPendingAnalysis();
+        setAnalysis(pending.primary);
+        setCompetitors(
+          pending.kind === 'comparison'
+            ? pending.competitors
+            : [null, null]
+        );
+        setUrl(pending.primary.url);
+        setPhase('done');
+        setPhaseDetail('');
+        setIsPersistingPending(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [analysis, router, session?.user]);
 
   const analyzeUrl = async (targetUrl: string, onPhase?: (phase: AnalysisPhase, detail: string) => void): Promise<SiteAnalysis> => {
     const response = await fetch('/api/analyze', {
@@ -208,7 +354,10 @@ function HomeContent() {
     setError('');
     setAnalysis(null);
     setSharedResult(null);
+    setSavedToHistory(false);
     setCompetitors([null, null]);
+    setComparingPhases([null, null]);
+    setIsPersistingPending(false);
 
     try {
       const data = await analyzeUrl(url, (p, d) => {
@@ -216,50 +365,83 @@ function HomeContent() {
         setPhaseDetail(d);
       });
 
-      setPhase('done');
-
-      // Signed-in: save and redirect to dashboard analysis page
-      if (session?.user) {
-        try {
-          const saveRes = await fetch('/api/analyses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ analysis: data }),
-          });
-          const { id } = await saveRes.json();
-          router.push(`/dashboard/analysis/${id}`);
-          return;
-        } catch {
-          // Fall through to show inline if save fails
-        }
-      }
-
-      // Unsigned-in: show preview inline
-      setAnalysis(data);
-
-      // Encode shareable URL
-      const hash = encodeShareableResult(data);
-      window.history.replaceState(null, '', '#r=' + hash);
-
       // Compare mode: analyze competitors in parallel
-      if (compareMode) {
-        const activeCompetitors = competitorUrls.filter(u => u.trim());
-        if (activeCompetitors.length > 0) {
-          setComparingPhases(activeCompetitors.map(() => 'crawling' as AnalysisPhase));
-          const promises = activeCompetitors.map((compUrl, idx) =>
+      let competitorResults: (SiteAnalysis | null)[] = [null, null];
+      const activeCompetitors = compareMode
+        ? competitorUrls.map(u => u.trim()).filter(Boolean)
+        : [];
+      if (activeCompetitors.length > 0) {
+        setPhase('crawling');
+        setPhaseDetail('Analyzing competitor sites...');
+        setComparingPhases(activeCompetitors.map(() => 'crawling' as AnalysisPhase));
+        const results = await Promise.all(
+          activeCompetitors.map((compUrl, idx) =>
             analyzeUrl(compUrl, (p) => {
+              setPhase(p);
+              setPhaseDetail(`Competitor ${idx + 1}: ${p}`);
               setComparingPhases(prev => {
                 const next = [...prev];
                 next[idx] = p;
                 return next;
               });
             }).catch(() => null)
-          );
-          const results = await Promise.all(promises);
-          setCompetitors(results.map(r => r || null));
-          setComparingPhases([null, null]);
-        }
+          )
+        );
+        competitorResults = results.map(r => r || null);
+        setCompetitors(competitorResults);
+        setComparingPhases([null, null]);
       }
+
+      const successfulCompetitors = competitorResults.filter((site): site is SiteAnalysis => site !== null);
+
+      if (session?.user) {
+        try {
+          const primaryId = await saveAnalysisForUser(data);
+
+          if (activeCompetitors.length > 0 && successfulCompetitors.length > 0) {
+            try {
+              const competitorIds = await Promise.all(successfulCompetitors.map(site => saveAnalysisForUser(site)));
+              const comparisonId = await saveComparisonForUser(primaryId, competitorIds);
+              clearPendingAnalysis();
+              setSavedToHistory(true);
+              setPhase('done');
+              setPhaseDetail('');
+              router.push(`/dashboard/comparison/${comparisonId}`);
+              return;
+            } catch {
+              // Fall back to primary analysis detail if comparison save fails.
+            }
+          }
+
+          clearPendingAnalysis();
+          setSavedToHistory(true);
+          setPhase('done');
+          setPhaseDetail('');
+          router.push(`/dashboard/analysis/${primaryId}`);
+          return;
+        } catch {
+          // Fall through to inline result if save fails.
+        }
+      } else if (successfulCompetitors.length > 0) {
+        savePendingAnalysis({
+          kind: 'comparison',
+          primary: data,
+          competitors: successfulCompetitors,
+        });
+      } else {
+        savePendingAnalysis({
+          kind: 'single',
+          primary: data,
+        });
+      }
+
+      setPhase('done');
+      setPhaseDetail('');
+      setAnalysis(data);
+
+      // Encode shareable URL
+      const hash = encodeShareableResult(data);
+      window.history.replaceState(null, '', '#r=' + hash);
 
       setTimeout(() => {
         resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -267,10 +449,15 @@ function HomeContent() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
       setPhase('error');
+      setComparingPhases([null, null]);
+      setIsPersistingPending(false);
     }
   };
 
-  const isLoading = phase !== 'idle' && phase !== 'done' && phase !== 'error';
+  const isLoading =
+    (phase !== 'idle' && phase !== 'done' && phase !== 'error') ||
+    comparingPhases.some(p => p !== null) ||
+    isPersistingPending;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -675,10 +862,18 @@ function HomeContent() {
         </>
       )}
 
-      {/* ── Results Preview (unsigned-in users) ────────────────────────── */}
+      {/* ── Results ─────────────────────────────────────────────────────── */}
       {analysis && (
         <div ref={resultsRef} className="max-w-6xl mx-auto px-6 pb-24">
-          <UnsignedResultsPreview analysis={analysis} />
+          {session?.user ? (
+            <AnalysisResultsView
+              analysis={analysis}
+              competitors={competitors.filter((site): site is SiteAnalysis => site !== null)}
+              savedToHistory={savedToHistory}
+            />
+          ) : (
+            <UnsignedResultsPreview analysis={analysis} />
+          )}
         </div>
       )}
 
@@ -761,7 +956,7 @@ function UnsignedResultsPreview({ analysis }: { analysis: SiteAnalysis }) {
             Get AI-powered strategic recommendations, detailed scoring breakdowns, priority action items, and save your analyses to track progress over time.
           </p>
           <button
-            onClick={() => signIn('google')}
+            onClick={() => signIn('google', { callbackUrl: typeof window !== 'undefined' ? `${window.location.origin}/` : '/' })}
             className="flex items-center gap-2.5 px-6 py-3 rounded-xl bg-accent hover:bg-accent-light text-white font-semibold text-sm transition-all cursor-pointer analyze-glow"
           >
             <svg width="16" height="16" viewBox="0 0 24 24">
@@ -836,4 +1031,3 @@ function SharedResultView({ result, onReanalyze }: { result: ShareableResult; on
     </div>
   );
 }
-

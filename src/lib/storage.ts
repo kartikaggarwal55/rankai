@@ -22,6 +22,18 @@ function ensureTable() {
       )
     `.then(() =>
       sql`CREATE INDEX IF NOT EXISTS idx_analyses_user_id ON analyses (user_id, created_at DESC)`
+    ).then(() =>
+      sql`
+        CREATE TABLE IF NOT EXISTS comparisons (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          user_id TEXT NOT NULL,
+          primary_analysis_id UUID NOT NULL,
+          competitor_analysis_ids JSONB NOT NULL,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        )
+      `
+    ).then(() =>
+      sql`CREATE INDEX IF NOT EXISTS idx_comparisons_user_id ON comparisons (user_id, created_at DESC)`
     ).then(() => {}).catch((err) => {
       tableReady = null; // Reset so next call retries
       throw err;
@@ -80,6 +92,71 @@ export async function deleteAnalysis(id: string, userId: string): Promise<boolea
   await ensureTable();
   const rows = await sql`
     DELETE FROM analyses
+    WHERE id = ${id}::uuid AND user_id = ${userId}
+    RETURNING id
+  `;
+  return rows.length > 0;
+}
+
+export async function saveComparison(
+  userId: string,
+  primaryAnalysisId: string,
+  competitorAnalysisIds: string[]
+): Promise<string> {
+  await ensureTable();
+  const rows = await sql`
+    INSERT INTO comparisons (user_id, primary_analysis_id, competitor_analysis_ids)
+    VALUES (${userId}, ${primaryAnalysisId}::uuid, ${JSON.stringify(competitorAnalysisIds)}::jsonb)
+    RETURNING id
+  `;
+  return rows[0].id;
+}
+
+export async function getComparisonsSummary(userId: string) {
+  await ensureTable();
+  return sql`
+    SELECT
+      c.id,
+      c.primary_analysis_id,
+      c.competitor_analysis_ids,
+      c.created_at,
+      a.url AS primary_url,
+      a.overall_score AS primary_overall_score,
+      a.overall_grade AS primary_overall_grade
+    FROM comparisons c
+    LEFT JOIN analyses a ON a.id = c.primary_analysis_id
+    WHERE c.user_id = ${userId}
+    ORDER BY c.created_at DESC
+  `;
+}
+
+export async function getComparison(id: string) {
+  await ensureTable();
+  const rows = await sql`
+    SELECT id, user_id, primary_analysis_id, competitor_analysis_ids, created_at
+    FROM comparisons
+    WHERE id = ${id}::uuid
+  `;
+  if (rows.length === 0) return null;
+
+  const row = rows[0];
+  const competitorIds = Array.isArray(row.competitor_analysis_ids)
+    ? row.competitor_analysis_ids.map((entry: unknown) => String(entry))
+    : [];
+
+  return {
+    id: row.id as string,
+    userId: row.user_id as string,
+    primaryAnalysisId: row.primary_analysis_id as string,
+    competitorAnalysisIds: competitorIds,
+    createdAt: row.created_at,
+  };
+}
+
+export async function deleteComparison(id: string, userId: string): Promise<boolean> {
+  await ensureTable();
+  const rows = await sql`
+    DELETE FROM comparisons
     WHERE id = ${id}::uuid AND user_id = ${userId}
     RETURNING id
   `;

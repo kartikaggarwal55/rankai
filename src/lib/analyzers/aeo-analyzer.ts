@@ -190,7 +190,11 @@ function analyzeApiDocumentation(ctx: SiteContext): CategoryScore {
   if (!hasExamples) recommendations.push('Add request/response examples for every API endpoint. Include complete JSON payloads and code examples — agents need these to generate correct integration code.');
 
   // Authentication documentation
-  const hasAuthDocs = ctx.allPages.some(p => /auth|authentication|api[- ]key|token|oauth/i.test(p.url) || /authentication|api[- ]key|bearer token|authorization header/i.test(p.html).toString());
+  const hasAuthDocs = ctx.allPages.some(
+    p =>
+      /auth|authentication|api[- ]key|token|oauth/i.test(p.url) ||
+      /authentication|api[- ]key|bearer token|authorization header/i.test(p.html)
+  );
   findings.push({
     check: 'Authentication documentation',
     status: hasAuthDocs ? 'pass' : 'fail',

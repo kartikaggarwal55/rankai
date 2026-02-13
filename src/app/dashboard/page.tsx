@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect, useCallback, Suspense } from 'react';
+import { useState, useRef, useEffect, Suspense } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -31,6 +31,17 @@ type AnalysisSummary = {
   createdAt: string;
 };
 
+type ComparisonSummary = {
+  id: string;
+  primaryAnalysisId: string;
+  competitorAnalysisIds: string[];
+  competitorCount: number;
+  primaryUrl: string | null;
+  primaryOverallScore: number | null;
+  primaryOverallGrade: string | null;
+  createdAt: string;
+};
+
 export default function DashboardPage() {
   return (
     <Suspense>
@@ -46,8 +57,10 @@ function DashboardContent() {
 
   // Dashboard state
   const [history, setHistory] = useState<AnalysisSummary[]>([]);
+  const [comparisons, setComparisons] = useState<ComparisonSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [deletingComparisonId, setDeletingComparisonId] = useState<string | null>(null);
 
   // Analysis state
   const [url, setUrl] = useState('');
@@ -86,12 +99,18 @@ function DashboardContent() {
     }
   }, [searchParams, loading]);
 
-  // Fetch analyses
+  // Fetch analyses and comparisons
   useEffect(() => {
     if (session?.user) {
-      fetch('/api/analyses')
-        .then(res => res.ok ? res.json() : [])
-        .then(data => { setHistory(data); setLoading(false); })
+      Promise.all([
+        fetch('/api/analyses').then(res => res.ok ? res.json() : []),
+        fetch('/api/comparisons').then(res => res.ok ? res.json() : []),
+      ])
+        .then(([analysisData, comparisonData]) => {
+          setHistory(analysisData);
+          setComparisons(comparisonData);
+          setLoading(false);
+        })
         .catch(() => setLoading(false));
     }
   }, [session]);
@@ -105,6 +124,17 @@ function DashboardContent() {
       }
     } catch { /* ignore */ }
     setDeletingId(null);
+  };
+
+  const handleDeleteComparison = async (id: string) => {
+    setDeletingComparisonId(id);
+    try {
+      const res = await fetch(`/api/comparisons/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        setComparisons(prev => prev.filter(c => c.id !== id));
+      }
+    } catch { /* ignore */ }
+    setDeletingComparisonId(null);
   };
 
   const analyzeUrl = async (targetUrl: string, onPhase?: (phase: AnalysisPhase, detail: string) => void): Promise<SiteAnalysis> => {
@@ -170,7 +200,14 @@ function DashboardContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ analysis: data }),
       });
-      const { id } = await saveRes.json();
+      if (!saveRes.ok) {
+        throw new Error('Failed to save analysis');
+      }
+      const payload = await saveRes.json();
+      if (!payload?.id || typeof payload.id !== 'string') {
+        throw new Error('Failed to save analysis');
+      }
+      const { id } = payload;
       router.push(`/dashboard/analysis/${id}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Analysis failed');
@@ -461,6 +498,69 @@ function DashboardContent() {
               ))}
             </div>
           )}
+
+          <div className="mt-10">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-xl font-bold tracking-tight">Saved Comparisons</h2>
+                <p className="text-sm text-text-secondary mt-0.5">
+                  {comparisons.length === 0
+                    ? 'No comparisons yet — run Compare mode from the home page'
+                    : `${comparisons.length} comparison${comparisons.length !== 1 ? 's' : ''}`}
+                </p>
+              </div>
+            </div>
+
+            {comparisons.length === 0 ? (
+              <div className="p-5 rounded-xl bg-bg-card border border-border text-sm text-text-secondary">
+                Use Compare mode on the homepage to run multiple sites side-by-side and save the comparison here.
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                {comparisons.map(c => (
+                  <button
+                    key={c.id}
+                    onClick={() => router.push(`/dashboard/comparison/${c.id}`)}
+                    className="group relative p-5 rounded-xl bg-bg-card border border-border hover:bg-bg-elevated/50 hover:ring-1 hover:ring-border transition-all cursor-pointer text-left"
+                  >
+                    <div
+                      className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                      onClick={(e) => { e.stopPropagation(); handleDeleteComparison(c.id); }}
+                    >
+                      <div className="p-1.5 rounded-md hover:bg-bg-hover transition-colors">
+                        {deletingComparisonId === c.id ? (
+                          <Loader2 size={13} className="text-text-muted animate-spin" />
+                        ) : (
+                          <Trash2 size={13} className="text-text-muted hover:text-danger" />
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                      <div className="shrink-0">
+                        <ScoreRing
+                          score={c.primaryOverallScore ?? 0}
+                          grade={c.primaryOverallGrade ?? 'N/A'}
+                          size={56}
+                        />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[15px] text-text font-semibold truncate">
+                          {c.primaryUrl ? getDomain(c.primaryUrl) : 'Primary analysis unavailable'}
+                        </p>
+                        <p className="text-xs text-text-muted mt-0.5">
+                          {c.competitorCount} competitor{c.competitorCount !== 1 ? 's' : ''}
+                        </p>
+                        <p className="text-[11px] text-text-muted mt-3">
+                          {new Date(c.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </p>
+                      </div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -8,7 +8,9 @@ import { ThemeToggle } from '@/components/theme-toggle';
 
 function Nav() {
   const pathname = usePathname();
-  const isAnalysisPage = pathname.startsWith('/dashboard/analysis/');
+  const isDetailPage =
+    pathname.startsWith('/dashboard/analysis/') ||
+    pathname.startsWith('/dashboard/comparison/');
 
   return (
     <nav
@@ -27,7 +29,7 @@ function Nav() {
           <span className="text-base font-bold tracking-tight">RankAI</span>
         </Link>
         <div className="flex items-center gap-3 text-sm text-text-secondary">
-          {isAnalysisPage ? (
+          {isDetailPage ? (
             <>
               <Link
                 href="/dashboard"

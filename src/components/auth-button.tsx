@@ -79,7 +79,7 @@ export function AuthButton() {
 
   return (
     <button
-      onClick={() => signIn('google')}
+      onClick={() => signIn('google', { callbackUrl: typeof window !== 'undefined' ? `${window.location.origin}/` : '/' })}
       className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-card hover:bg-bg-elevated border border-border-bright text-[13px] text-text hover:text-text transition-all cursor-pointer"
     >
       <svg width="14" height="14" viewBox="0 0 24 24">

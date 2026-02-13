@@ -69,12 +69,16 @@ export function AnalysisResultsView({
   analysis,
   competitors = [],
   savedToHistory = false,
+  initialTab = 'overview',
 }: {
   analysis: SiteAnalysis;
   competitors?: SiteAnalysis[];
   savedToHistory?: boolean;
+  initialTab?: 'overview' | 'geo' | 'aeo' | 'recommendations' | 'insights' | 'comparison';
 }) {
-  const [activeTab, setActiveTab] = useState<'overview' | 'geo' | 'aeo' | 'recommendations' | 'insights' | 'comparison'>('overview');
+  const safeInitialTab =
+    initialTab === 'comparison' && competitors.length === 0 ? 'overview' : initialTab;
+  const [activeTab, setActiveTab] = useState<'overview' | 'geo' | 'aeo' | 'recommendations' | 'insights' | 'comparison'>(safeInitialTab);
   const [copied, setCopied] = useState(false);
 
   const handleShare = async () => {
