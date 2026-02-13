@@ -21,6 +21,8 @@ const STREAM_HEADERS = {
   'Connection': 'keep-alive',
 };
 
+const ANALYSIS_PHASE_DELAY_MS = 2000;
+
 const INTERNAL_HOSTNAMES = new Set([
   'localhost',
   'host.docker.internal',
@@ -125,6 +127,10 @@ function createStream() {
   };
 
   return { stream, send, close };
+}
+
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 export async function POST(request: NextRequest) {
@@ -234,6 +240,7 @@ export async function POST(request: NextRequest) {
 
       // Phase 5: GEO Analysis
       send({ type: 'phase', phase: 'analyzing-geo', detail: `Scoring ${crawlResults.length} pages across 11 GEO categories` });
+      await sleep(ANALYSIS_PHASE_DELAY_MS);
 
       const pageAnalyses: PageAnalysis[] = crawlResults.map(cr => ({
         url: cr.url,
@@ -245,6 +252,7 @@ export async function POST(request: NextRequest) {
 
       // Phase 6: AEO Analysis
       send({ type: 'phase', phase: 'analyzing-aeo', detail: `Evaluating AEO for ${siteType} site type` });
+      await sleep(ANALYSIS_PHASE_DELAY_MS);
 
       const aeo = analyzeAdaptiveAEO({
         allPages: crawlResults.map(cr => ({ url: cr.url, html: cr.html, title: cr.title })),
