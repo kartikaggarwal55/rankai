@@ -223,12 +223,16 @@ export async function POST(request: NextRequest) {
 
       // Phase 3: Fetch site-level resources
       send({ type: 'phase', phase: 'crawling', detail: 'Fetching robots.txt, llms.txt, OpenAPI spec...' });
-      const [robotsTxt, llmsTxt, llmsFullTxt, openApiSpec] = await Promise.all([
+      const resourceResults = await Promise.allSettled([
         fetchRobotsTxt(origin),
         fetchLlmsTxt(origin),
         fetchLlmsFullTxt(origin),
         fetchOpenApiSpec(origin),
       ]);
+      const robotsTxt = resourceResults[0].status === 'fulfilled' ? resourceResults[0].value : null;
+      const llmsTxt = resourceResults[1].status === 'fulfilled' ? resourceResults[1].value : null;
+      const llmsFullTxt = resourceResults[2].status === 'fulfilled' ? resourceResults[2].value : null;
+      const openApiSpec = resourceResults[3].status === 'fulfilled' ? resourceResults[3].value : null;
 
       // Phase 4: Classify site type
       const siteType = classifySite({

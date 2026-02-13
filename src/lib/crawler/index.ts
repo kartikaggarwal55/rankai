@@ -2,6 +2,9 @@ import * as cheerio from 'cheerio';
 import { CrawlResult } from '../types';
 
 const USER_AGENT = 'RankAI-Analyzer/1.0 (GEO/AEO website analysis tool)';
+const SITE_RESOURCE_TIMEOUT_MS = 3000;
+const OPENAPI_DISCOVERY_TIMEOUT_MS = 3000;
+const OPENAPI_PATHS = ['/openapi.json', '/swagger.json', '/api-docs', '/api/openapi.json', '/docs/openapi.json'] as const;
 
 export async function crawlPage(url: string): Promise<CrawlResult> {
   const start = Date.now();
@@ -130,7 +133,7 @@ export async function fetchRobotsTxt(origin: string): Promise<string | null> {
   try {
     const response = await fetch(`${origin}/robots.txt`, {
       headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(SITE_RESOURCE_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     return await response.text();
@@ -141,7 +144,7 @@ export async function fetchLlmsTxt(origin: string): Promise<string | null> {
   try {
     const response = await fetch(`${origin}/llms.txt`, {
       headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(SITE_RESOURCE_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     return await response.text();
@@ -152,7 +155,7 @@ export async function fetchLlmsFullTxt(origin: string): Promise<string | null> {
   try {
     const response = await fetch(`${origin}/llms-full.txt`, {
       headers: { 'User-Agent': USER_AGENT },
-      signal: AbortSignal.timeout(5000),
+      signal: AbortSignal.timeout(SITE_RESOURCE_TIMEOUT_MS),
     });
     if (!response.ok) return null;
     return await response.text();
@@ -160,18 +163,31 @@ export async function fetchLlmsFullTxt(origin: string): Promise<string | null> {
 }
 
 export async function fetchOpenApiSpec(origin: string): Promise<string | null> {
-  const paths = ['/openapi.json', '/swagger.json', '/api-docs', '/api/openapi.json', '/docs/openapi.json'];
-  for (const path of paths) {
-    try {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), OPENAPI_DISCOVERY_TIMEOUT_MS);
+
+  try {
+    const attempts = OPENAPI_PATHS.map(async path => {
       const response = await fetch(`${origin}${path}`, {
         headers: { 'User-Agent': USER_AGENT },
-        signal: AbortSignal.timeout(5000),
+        signal: controller.signal,
       });
-      if (response.ok) {
-        const text = await response.text();
-        if (text.includes('"openapi"') || text.includes('"swagger"')) return text;
+      if (!response.ok) {
+        throw new Error('OpenAPI path not found');
       }
-    } catch { continue; }
+      const text = await response.text();
+      if (text.includes('"openapi"') || text.includes('"swagger"')) {
+        return text;
+      }
+      throw new Error('Path does not contain an OpenAPI/Swagger document');
+    });
+
+    const spec = await Promise.any(attempts);
+    return spec;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+    controller.abort();
   }
-  return null;
 }
