@@ -14,7 +14,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ id });
   } catch (err) {
     console.error('POST /api/analyses error:', err);
-    return NextResponse.json({ error: 'Failed to save', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to save' }, { status: 500 });
   }
 }
 
@@ -40,6 +40,6 @@ export async function GET() {
     );
   } catch (err) {
     console.error('GET /api/analyses error:', err);
-    return NextResponse.json({ error: 'Failed to fetch', detail: err instanceof Error ? err.message : String(err) }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch' }, { status: 500 });
   }
 }
