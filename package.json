@@ -12,12 +12,15 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.74.0",
     "@neondatabase/serverless": "^1.0.2",
+    "@pdf-lib/fontkit": "^1.1.1",
     "cheerio": "^1.0.0",
     "geist": "^1.7.0",
     "lucide-react": "^0.563.0",
+    "markdown-it": "^14.1.1",
     "motion": "^12.34.0",
     "next": "16.1.6",
     "next-auth": "^5.0.0-beta.30",
+    "pdf-lib": "^1.17.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-markdown": "^10.1.0",
@@ -26,6 +29,7 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
+    "@types/markdown-it": "^14.1.2",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

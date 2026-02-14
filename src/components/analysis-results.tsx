@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import {
   Globe, Sparkles, Bot, FileText, BarChart3, Zap, ExternalLink,
-  AlertTriangle, Clock, ArrowUp, TrendingUp, Share2, Download,
+  AlertTriangle, Clock, ArrowUp, TrendingUp, Share2, Download, Loader2,
   LayoutList, Grid3X3, Check, ChevronDown
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
@@ -65,6 +65,23 @@ function formatCategoryKey(key: string): string {
   return key.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase()).trim();
 }
 
+function parseFilenameFromContentDisposition(header: string | null): string | null {
+  if (!header) return null;
+  const encodedMatch = header.match(/filename\*=UTF-8''([^;]+)/i);
+  if (encodedMatch?.[1]) {
+    try {
+      return decodeURIComponent(encodedMatch[1].replace(/["']/g, ''));
+    } catch {
+      return encodedMatch[1].replace(/["']/g, '');
+    }
+  }
+  const plainMatch = header.match(/filename="?([^\";]+)"?/i);
+  if (plainMatch?.[1]) {
+    return plainMatch[1];
+  }
+  return null;
+}
+
 export function AnalysisResultsView({
   analysis,
   competitors = [],
@@ -80,6 +97,8 @@ export function AnalysisResultsView({
     initialTab === 'comparison' && competitors.length === 0 ? 'overview' : initialTab;
   const [activeTab, setActiveTab] = useState<'overview' | 'geo' | 'aeo' | 'recommendations' | 'insights' | 'comparison'>(safeInitialTab);
   const [copied, setCopied] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
 
   const handleShare = async () => {
     const hash = encodeShareableResult(analysis);
@@ -89,40 +108,88 @@ export function AnalysisResultsView({
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleExport = () => {
-    window.print();
+  const handleExport = async () => {
+    if (isExporting) return;
+    setExportError('');
+    setIsExporting(true);
+
+    try {
+      const response = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ analysis, competitors }),
+      });
+
+      if (!response.ok) {
+        let message = 'Failed to generate PDF report';
+        try {
+          const payload = await response.json();
+          if (payload?.error && typeof payload.error === 'string') {
+            message = payload.error;
+          }
+        } catch {}
+        throw new Error(message);
+      }
+
+      const blob = await response.blob();
+      const filename = parseFilenameFromContentDisposition(response.headers.get('content-disposition')) || 'rankai-report.pdf';
+      const href = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = href;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(href);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : 'Failed to generate PDF report');
+    } finally {
+      setIsExporting(false);
+    }
   };
 
   return (
     <div style={{ animation: 'fadeInUp 0.6s ease-out' }}>
       {/* URL bar + Issue summary */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 mb-6">
-        <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-bg-card border border-border flex-1 min-w-0">
-          <Globe size={16} className="text-text-muted shrink-0" />
-          <a href={analysis.url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent-light hover:underline truncate flex items-center gap-1.5">
-            {analysis.url}
-            <ExternalLink size={12} />
-          </a>
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest bg-accent-dim text-accent-light shrink-0">
-            {SITE_TYPE_LABELS[analysis.siteType]}
-          </span>
-          <span className="text-xs text-text-muted shrink-0 font-mono tabular-nums">
-            {new Date(analysis.crawledAt).toLocaleDateString()}
-          </span>
-          <div className="flex items-center gap-1.5 shrink-0 ml-auto">
-            {savedToHistory && (
-              <span className="text-[10px] text-score-pass font-medium" style={{ animation: 'fadeIn 0.3s ease-out' }}>Saved to history</span>
-            )}
-            <button onClick={handleShare} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer" title="Copy link">
-              {copied ? <Check size={14} className="text-score-pass" /> : <Share2 size={14} className="text-text-muted" />}
-            </button>
-            <button onClick={handleExport} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer print:hidden" title="Export report">
-              <Download size={14} className="text-text-muted" />
-            </button>
+      <div className="mb-6">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <div className="flex items-center gap-3 px-5 py-3 rounded-xl bg-bg-card border border-border flex-1 min-w-0">
+            <Globe size={16} className="text-text-muted shrink-0" />
+            <a href={analysis.url} target="_blank" rel="noopener noreferrer" className="text-sm text-accent-light hover:underline truncate flex items-center gap-1.5">
+              {analysis.url}
+              <ExternalLink size={12} />
+            </a>
+            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-widest bg-accent-dim text-accent-light shrink-0">
+              {SITE_TYPE_LABELS[analysis.siteType]}
+            </span>
+            <span className="text-xs text-text-muted shrink-0 font-mono tabular-nums">
+              {new Date(analysis.crawledAt).toLocaleDateString()}
+            </span>
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
+              {savedToHistory && (
+                <span className="text-[10px] text-score-pass font-medium" style={{ animation: 'fadeIn 0.3s ease-out' }}>Saved to history</span>
+              )}
+              <button onClick={handleShare} className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer" title="Copy link">
+                {copied ? <Check size={14} className="text-score-pass" /> : <Share2 size={14} className="text-text-muted" />}
+              </button>
+              <button
+                onClick={handleExport}
+                disabled={isExporting}
+                className="p-1.5 rounded-md hover:bg-bg-elevated transition-colors cursor-pointer print:hidden disabled:opacity-40 disabled:cursor-not-allowed"
+                title="Export report"
+              >
+                {isExporting
+                  ? <Loader2 size={14} className="text-text-muted animate-spin" />
+                  : <Download size={14} className="text-text-muted" />}
+              </button>
+            </div>
           </div>
-        </div>
 
-        <IssueSummaryBar recommendations={analysis.topRecommendations} />
+          <IssueSummaryBar recommendations={analysis.topRecommendations} />
+        </div>
+        {exportError && (
+          <p className="mt-2 text-xs text-danger">{exportError}</p>
+        )}
       </div>
 
       {/* Score hero */}
