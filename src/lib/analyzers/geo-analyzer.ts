@@ -1,21 +1,36 @@
 import * as cheerio from 'cheerio';
 import { GEOAnalysis, CategoryScore, Finding, getGrade } from '../types';
 
+const BODY_TEXT_ANALYSIS_LIMIT = 300_000;
+const MAIN_TEXT_ANALYSIS_LIMIT = 200_000;
+const MAIN_CONTENT_SELECTORS = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
+
+function normalizeAndLimitText(raw: string, maxChars: number): string {
+  const normalized = raw.replace(/\s+/g, ' ').trim();
+  return normalized.length > maxChars ? normalized.slice(0, maxChars) : normalized;
+}
+
 export function analyzeGEO(html: string, url: string, headers: Record<string, string>, loadTime: number): GEOAnalysis {
   const $ = cheerio.load(html);
+  const bodyText = normalizeAndLimitText($('body').text(), BODY_TEXT_ANALYSIS_LIMIT);
+  const mainContent = $(MAIN_CONTENT_SELECTORS).first();
+  const mainText = normalizeAndLimitText(
+    (mainContent.length ? mainContent : $('body')).text(),
+    MAIN_TEXT_ANALYSIS_LIMIT
+  );
 
   return {
     contentStructure: analyzeContentStructure($),
     schemaMarkup: analyzeSchemaMarkup($),
-    topicalAuthority: analyzeTopicalAuthority($, url),
-    citationWorthiness: analyzeCitationWorthiness($),
-    contentFreshness: analyzeContentFreshness($, headers),
-    languagePatterns: analyzeLanguagePatterns($),
+    topicalAuthority: analyzeTopicalAuthority($, url, mainText),
+    citationWorthiness: analyzeCitationWorthiness($, bodyText),
+    contentFreshness: analyzeContentFreshness($, headers, bodyText),
+    languagePatterns: analyzeLanguagePatterns($, mainText),
     metaInformation: analyzeMetaInformation($),
-    technicalHealth: analyzeTechnicalHealth($, headers, loadTime),
-    contentUniqueness: analyzeContentUniqueness($),
+    technicalHealth: analyzeTechnicalHealth($, headers, loadTime, bodyText),
+    contentUniqueness: analyzeContentUniqueness($, mainText),
     multiFormatContent: analyzeMultiFormatContent($),
-    eeatSignals: analyzeEEATSignals($, url),
+    eeatSignals: analyzeEEATSignals($, url, bodyText),
   };
 }
 
@@ -242,7 +257,7 @@ function analyzeSchemaMarkup($: cheerio.CheerioAPI): CategoryScore {
   return { score, grade: getGrade(score), weight: 0.13, findings, recommendations };
 }
 
-function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string): CategoryScore {
+function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string, contentText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
 
@@ -282,9 +297,6 @@ function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string): CategorySc
   if (contentLinks < 5) recommendations.push('Add contextual links within your content body (not just navigation). Link to related articles, guides, and resources to demonstrate comprehensive topic coverage.');
 
   // Content depth (word count)
-  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
-  const mainContentEl = $(mainSelectors).first();
-  const contentText = (mainContentEl.length ? mainContentEl : $('body')).text().replace(/\s+/g, ' ').trim();
   const wordCount = contentText.split(/\s+/).length;
   findings.push({
     check: 'Content depth (word count)',
@@ -324,10 +336,9 @@ function analyzeTopicalAuthority($: cheerio.CheerioAPI, url: string): CategorySc
   return { score, grade: getGrade(score), weight: 0.10, findings, recommendations };
 }
 
-function analyzeCitationWorthiness($: cheerio.CheerioAPI): CategoryScore {
+function analyzeCitationWorthiness($: cheerio.CheerioAPI, bodyText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
-  const bodyText = $('body').text();
 
   // Statistics and numbers
   const statPatterns = [
@@ -356,7 +367,7 @@ function analyzeCitationWorthiness($: cheerio.CheerioAPI): CategoryScore {
 
   // Expert quotations
   const quoteElements = $('blockquote, q').length;
-  const quotePatterns = bodyText.match(/[""]([^""]+)[""].*(?:said|according to|states|notes|explains|argues)/gi) || [];
+  const quotePatterns = bodyText.match(/["“][^"”\n]{20,280}["”]\s*(?:[-–—]\s*)?(?:according to|said|states|notes|explains|argues)\b/gi) || [];
   const totalQuotes = quoteElements + quotePatterns.length;
   findings.push({
     check: 'Expert quotations',
@@ -409,7 +420,7 @@ function analyzeCitationWorthiness($: cheerio.CheerioAPI): CategoryScore {
   return { score, grade: getGrade(score), weight: 0.13, findings, recommendations };
 }
 
-function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, string>): CategoryScore {
+function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, string>, bodyText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
 
@@ -435,7 +446,7 @@ function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, 
 
   // Check for visible date on page
   const datePatterns = $('time, [datetime], .date, .published, .updated, .modified').length;
-  const visibleDateText = $('body').text().match(/(?:updated|modified|published|posted|last updated)[\s:]*(?:on\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/gi) || [];
+  const visibleDateText = bodyText.match(/(?:updated|modified|published|posted|last updated)[\s:]*(?:on\s+)?(?:january|february|march|april|may|june|july|august|september|october|november|december|\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\d{4}[\/\-]\d{1,2}[\/\-]\d{1,2})/gi) || [];
   findings.push({
     check: 'Visible date on page',
     status: datePatterns > 0 || visibleDateText.length > 0 ? 'pass' : 'fail',
@@ -469,7 +480,6 @@ function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, 
   // Current year references
   const currentYear = new Date().getFullYear().toString();
   const prevYear = (new Date().getFullYear() - 1).toString();
-  const bodyText = $('body').text();
   const hasCurrentYear = bodyText.includes(currentYear);
   const hasPrevYear = bodyText.includes(prevYear);
   findings.push({
@@ -498,12 +508,9 @@ function analyzeContentFreshness($: cheerio.CheerioAPI, headers: Record<string, 
   return { score, grade: getGrade(score), weight: 0.08, findings, recommendations };
 }
 
-function analyzeLanguagePatterns($: cheerio.CheerioAPI): CategoryScore {
+function analyzeLanguagePatterns($: cheerio.CheerioAPI, contentText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
-  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
-  const mainContent = $(mainSelectors).first();
-  const contentText = (mainContent.length ? mainContent : $('body')).text().replace(/\s+/g, ' ').trim();
   const paragraphs = $('p').toArray().map(el => $(el).text().trim()).filter(t => t.length > 30);
 
   // Definitional statements
@@ -681,7 +688,7 @@ function analyzeMetaInformation($: cheerio.CheerioAPI): CategoryScore {
   return { score, grade: getGrade(score), weight: 0.03, findings, recommendations };
 }
 
-function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, string>, loadTime: number): CategoryScore {
+function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, string>, loadTime: number, bodyText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
 
@@ -706,9 +713,9 @@ function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, s
   });
 
   // Server-side rendering check
-  const hasSSRContent = $('body').text().trim().length > 200;
+  const hasSSRContent = bodyText.length > 200;
   const hasReactRoot = $('#__next, #root, #app, [data-reactroot]').length > 0;
-  const hasEmptyBody = $('body').children().length < 3 && $('body').text().trim().length < 100;
+  const hasEmptyBody = $('body').children().length < 3 && bodyText.length < 100;
   findings.push({
     check: 'Server-side rendered content',
     status: hasSSRContent && !hasEmptyBody ? 'pass' : 'fail',
@@ -756,12 +763,9 @@ function analyzeTechnicalHealth($: cheerio.CheerioAPI, headers: Record<string, s
   return { score, grade: getGrade(score), weight: 0.05, findings, recommendations };
 }
 
-function analyzeContentUniqueness($: cheerio.CheerioAPI): CategoryScore {
+function analyzeContentUniqueness($: cheerio.CheerioAPI, contentText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
-  const mainSelectors = 'main, article, [role="main"], .content, .post-content, .entry-content, .article-body';
-  const mainContent = $(mainSelectors).first();
-  const contentText = (mainContent.length ? mainContent : $('body')).text().replace(/\s+/g, ' ').trim();
 
   // First-person experience signals
   const experiencePatterns = contentText.match(/\b(?:we tested|in our experience|we found that|our team|we built|we discovered|our data shows|we analyzed|our research|we implemented)\b/gi) || [];
@@ -911,7 +915,7 @@ function analyzeMultiFormatContent($: cheerio.CheerioAPI): CategoryScore {
   return { score, grade: getGrade(score), weight: 0.08, findings, recommendations };
 }
 
-function analyzeEEATSignals($: cheerio.CheerioAPI, url: string): CategoryScore {
+function analyzeEEATSignals($: cheerio.CheerioAPI, url: string, bodyText: string): CategoryScore {
   const findings: Finding[] = [];
   const recommendations: string[] = [];
 
@@ -925,7 +929,6 @@ function analyzeEEATSignals($: cheerio.CheerioAPI, url: string): CategoryScore {
     } catch { /* invalid JSON-LD */ }
   });
 
-  const bodyText = $('body').text();
   const allLinks = $('a[href]').toArray().map(el => ({
     href: $(el).attr('href') || '',
     text: $(el).text().trim().toLowerCase(),

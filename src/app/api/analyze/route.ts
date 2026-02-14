@@ -133,6 +133,10 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+function yieldToEventLoop() {
+  return new Promise<void>(resolve => setImmediate(resolve));
+}
+
 export async function POST(request: NextRequest) {
   let body;
   try {
@@ -246,11 +250,24 @@ export async function POST(request: NextRequest) {
       send({ type: 'phase', phase: 'analyzing-geo', detail: `Scoring ${crawlResults.length} pages across 11 GEO categories` });
       await sleep(ANALYSIS_PHASE_DELAY_MS);
 
-      const pageAnalyses: PageAnalysis[] = crawlResults.map(cr => ({
-        url: cr.url,
-        title: cr.title,
-        geo: analyzeGEO(cr.html, cr.url, cr.headers, cr.loadTime),
-      }));
+      const pageAnalyses: PageAnalysis[] = [];
+      for (let i = 0; i < crawlResults.length; i++) {
+        const page = crawlResults[i];
+        pageAnalyses.push({
+          url: page.url,
+          title: page.title,
+          geo: analyzeGEO(page.html, page.url, page.headers, page.loadTime),
+        });
+
+        if ((i + 1) % 5 === 0 || i === crawlResults.length - 1) {
+          send({
+            type: 'phase',
+            phase: 'analyzing-geo',
+            detail: `Scoring pages ${i + 1}/${crawlResults.length}`,
+          });
+          await yieldToEventLoop();
+        }
+      }
 
       const aggregatedGEO = aggregateGEOFromPages(pageAnalyses);
 
