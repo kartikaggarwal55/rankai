@@ -1,8 +1,8 @@
-# RankAI: Comprehensive Improvement Plan
+# VisiRank AI: Comprehensive Improvement Plan
 
 ## Project Context
 
-RankAI is a Next.js 16 analysis tool that scores websites on **GEO** (Generative Engine Optimization — how well content surfaces in AI-generated answers) and **AEO** (Agentic Engine Optimization — how well a platform enables autonomous AI agents to integrate with it). It crawls pages, runs heuristic checks across 22 categories, computes weighted scores, and generates Claude-powered strategic insights.
+VisiRank AI is a Next.js 16 analysis tool that scores websites on **GEO** (Generative Engine Optimization — how well content surfaces in AI-generated answers) and **AEO** (Agentic Engine Optimization — how well a platform enables autonomous AI agents to integrate with it). It crawls pages, runs heuristic checks across 22 categories, computes weighted scores, and generates Claude-powered strategic insights.
 
 ### Current Architecture
 
@@ -285,7 +285,7 @@ Add an "Export Report" button (lucide `Download` icon) next to the share button.
 - Hides the nav, footer, input area, and tab navigation
 - Renders all tab content sequentially (overview, GEO details, AEO details, recommendations) on one page
 - Forces light theme colors for print
-- Adds a header with "RankAI Analysis Report — [url] — [date]"
+- Adds a header with "VisiRank AI Analysis Report — [url] — [date]"
 
 ---
 
@@ -526,7 +526,7 @@ Place the "Compare" toggle as a small pill button below the URL input: `[Single 
 
 #### a) Server-side storage
 
-Create `src/lib/storage.ts` with functions to save/load analysis results using the filesystem (for now — no database needed). Store results as JSON files in a `.rankai-data/` directory (gitignored):
+Create `src/lib/storage.ts` with functions to save/load analysis results using the filesystem (for now — no database needed). Store results as JSON files in a `.visirank-data/` directory (gitignored):
 
 ```typescript
 interface StoredAnalysis {

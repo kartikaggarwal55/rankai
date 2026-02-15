@@ -132,7 +132,7 @@ export function AnalysisResultsView({
       }
 
       const blob = await response.blob();
-      const filename = parseFilenameFromContentDisposition(response.headers.get('content-disposition')) || 'rankai-report.pdf';
+      const filename = parseFilenameFromContentDisposition(response.headers.get('content-disposition')) || 'visirank-report.pdf';
       const href = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = href;

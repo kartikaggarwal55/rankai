@@ -89,7 +89,7 @@ function decodeShareableResult(hash: string): ShareableResult | null {
   }
 }
 
-const PENDING_ANALYSIS_KEY = 'rankai:pending-analysis';
+const PENDING_ANALYSIS_KEY = 'visirank:pending-analysis';
 
 type PendingAnalysisPayload =
   | { kind: 'single'; primary: SiteAnalysis }
@@ -475,7 +475,7 @@ function HomeContent() {
                 <rect x="12" y="1" width="3" height="14" rx="0.75" fill="white" />
               </svg>
             </div>
-            <span className="text-base font-bold tracking-tight">RankAI</span>
+            <span className="text-base font-bold tracking-tight">VisiRank AI</span>
           </Link>
           <div className="flex items-center gap-3 text-sm text-text-secondary">
             {session?.user && (
@@ -880,7 +880,7 @@ function HomeContent() {
       {/* ── Footer ─────────────────────────────────────────────────────── */}
       <footer className="mt-auto border-t border-border py-8 text-center">
         <p className="text-xs text-text-muted">
-          &copy; {new Date().getFullYear()} RankAI &mdash; Methodology based on Princeton GEO research (KDD 2024) and analysis of 680M+ AI citations.
+          &copy; {new Date().getFullYear()} VisiRank AI &mdash; Methodology based on Princeton GEO research (KDD 2024) and analysis of 680M+ AI citations.
         </p>
       </footer>
     </div>

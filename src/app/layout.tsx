@@ -5,7 +5,7 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "RankAI - GEO & AEO Analyzer",
+  title: "VisiRank AI - GEO & AEO Analyzer",
   description: "Analyze your website for Generative Engine Optimization (GEO) and Agentic Engine Optimization (AEO). Get actionable recommendations to improve AI visibility and agent-readiness.",
 };
 

@@ -271,7 +271,7 @@ body {
 
   /* Add report header */
   .print-header::before {
-    content: 'RankAI Analysis Report';
+    content: 'VisiRank AI Analysis Report';
     display: block;
     font-size: 24px;
     font-weight: bold;

@@ -1,7 +1,7 @@
 import * as cheerio from 'cheerio';
 import { CrawlResult } from '../types';
 
-const USER_AGENT = 'RankAI-Analyzer/1.0 (GEO/AEO website analysis tool)';
+const USER_AGENT = 'VisiRank-Analyzer/1.0 (GEO/AEO website analysis tool)';
 const SITE_RESOURCE_TIMEOUT_MS = 3000;
 const OPENAPI_DISCOVERY_TIMEOUT_MS = 3000;
 const OPENAPI_PATHS = ['/openapi.json', '/swagger.json', '/api-docs', '/api/openapi.json', '/docs/openapi.json'] as const;

@@ -108,7 +108,7 @@ describe('generateAnalysisReportPdf', () => {
 
     const loaded = await PDFDocument.load(bytes);
     expect(loaded.getPageCount()).toBeGreaterThanOrEqual(2);
-    expect(loaded.getTitle()).toContain('RankAI Report');
+    expect(loaded.getTitle()).toContain('VisiRank AI Report');
   });
 
   it('handles unicode content without failing PDF encoding', async () => {
@@ -127,6 +127,6 @@ describe('generateAnalysisReportPdf', () => {
 describe('buildReportFilename', () => {
   it('builds stable filename from url and crawl date', () => {
     const filename = buildReportFilename('https://docs.example.com/path', '2026-02-14T12:00:00.000Z');
-    expect(filename).toBe('rankai-report-docs.example.com-2026-02-14.pdf');
+    expect(filename).toBe('visirank-report-docs.example.com-2026-02-14.pdf');
   });
 });
