@@ -12,7 +12,7 @@ import { PageAnalysis, GEO_AEO_SPLIT } from '@/lib/types';
 
 const RequestSchema = z.object({
   url: z.string().trim().min(1, 'Please enter a valid URL'),
-  maxPages: z.coerce.number().min(1).max(50).default(25),
+  maxPages: z.coerce.number().min(1).max(50).default(10),
 });
 
 const STREAM_HEADERS = {

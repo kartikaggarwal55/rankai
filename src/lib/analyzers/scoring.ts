@@ -45,7 +45,9 @@ export function aggregateGEOFromPages(pageAnalyses: PageAnalysis[]): GEOAnalysis
   const result: Partial<GEOAnalysis> = {};
 
   for (const key of keys) {
-    const allFindings = pageAnalyses.flatMap(p => p.geo[key].findings);
+    const allFindings = pageAnalyses.flatMap(p =>
+      p.geo[key].findings.map(f => ({ ...f, pageUrls: [p.url] }))
+    );
     const allRecommendations = [...new Set(pageAnalyses.flatMap(p => p.geo[key].recommendations))];
     const avgScore = Math.round(
       pageAnalyses.reduce((sum, p) => sum + p.geo[key].score, 0) / pageAnalyses.length
@@ -67,14 +69,21 @@ function deduplicateFindings(findings: Finding[]): Finding[] {
   const seen = new Map<string, Finding>();
   for (const f of findings) {
     const existing = seen.get(f.check);
-    if (!existing || f.points < existing.points) {
-      seen.set(f.check, f);
+    if (!existing) {
+      seen.set(f.check, { ...f });
+    } else {
+      const mergedUrls = [...new Set([...(existing.pageUrls || []), ...(f.pageUrls || [])])];
+      if (f.points < existing.points) {
+        seen.set(f.check, { ...f, pageUrls: mergedUrls });
+      } else {
+        existing.pageUrls = mergedUrls;
+      }
     }
   }
   return Array.from(seen.values());
 }
 
-export function generateRecommendations(geo: GEOAnalysis, aeo: AEOAnalysis, siteType: SiteType = 'saas-api'): Recommendation[] {
+export function generateRecommendations(geo: GEOAnalysis, aeo: AEOAnalysis, siteType: SiteType = 'saas-api', pageAnalyses?: PageAnalysis[]): Recommendation[] {
   const recommendations: Recommendation[] = [];
 
   const geoCategories: { key: keyof GEOAnalysis; name: string; weight: number }[] = [
@@ -108,6 +117,9 @@ export function generateRecommendations(geo: GEOAnalysis, aeo: AEOAnalysis, site
           potentialScore: Math.min(100, category.score + 30),
           impact: `${Math.round(impact)}% potential overall improvement`,
         };
+        const failingFindings = category.findings.filter(f => f.status !== 'pass');
+        const affected = [...new Set(failingFindings.flatMap(f => f.pageUrls || []))];
+        if (affected.length > 0) recommendation.affectedPages = affected;
         addCodeSnippet(recommendation, cat.key, category);
         recommendations.push(recommendation);
       }
@@ -333,7 +345,7 @@ export function buildSiteAnalysis(
     overallGrade: getGrade(overallScore),
     geo,
     aeo,
-    topRecommendations: generateRecommendations(geo, aeo, siteType),
+    topRecommendations: generateRecommendations(geo, aeo, siteType, pageAnalyses),
     aiInsights,
   };
 }

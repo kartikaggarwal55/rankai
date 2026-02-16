@@ -620,6 +620,18 @@ function drawRecommendations(ctx: ReportContext, analysis: SiteAnalysis) {
       after: 2,
     });
 
+    if (recommendation.affectedPages && recommendation.affectedPages.length > 0) {
+      const paths = recommendation.affectedPages.map(u => {
+        try { return new URL(u).pathname; } catch { return u; }
+      });
+      drawTextBlock(ctx, `Affected pages: ${paths.join(', ')}`, {
+        size: 9,
+        color: COLOR_MUTED,
+        lineHeight: 12,
+        after: 2,
+      });
+    }
+
     if (recommendation.codeSnippet) {
       drawCodeBlock(
         ctx,
@@ -690,6 +702,18 @@ function drawCategoryScore(
         indent: 22,
         lineHeight: 12.5,
       });
+
+      if (finding.pageUrls && finding.pageUrls.length > 0) {
+        const paths = finding.pageUrls.map(u => {
+          try { return new URL(u).pathname; } catch { return u; }
+        });
+        drawTextBlock(ctx, `Pages: ${paths.join(', ')}`, {
+          size: 8.5,
+          color: COLOR_MUTED,
+          indent: 22,
+          lineHeight: 11.5,
+        });
+      }
     }
   }
 

@@ -9,9 +9,10 @@ interface CategoryCardProps {
   name: string;
   category: CategoryScore;
   type: 'geo' | 'aeo';
+  pagesAnalyzed?: number;
 }
 
-export function CategoryCard({ name, category, type }: CategoryCardProps) {
+export function CategoryCard({ name, category, type, pagesAnalyzed }: CategoryCardProps) {
   const [expanded, setExpanded] = useState(false);
   const color = getScoreColor(category.score);
   const typeColor = type === 'geo' ? 'var(--color-geo)' : 'var(--color-aeo)';
@@ -80,6 +81,23 @@ export function CategoryCard({ name, category, type }: CategoryCardProps) {
                     <span className="text-[11px] font-mono text-text-muted tabular-nums">{finding.points}/{finding.maxPoints}</span>
                   </div>
                   <p className="text-xs text-text-secondary mt-0.5 leading-relaxed">{finding.details}</p>
+                  {finding.pageUrls && finding.pageUrls.length > 0 && (pagesAnalyzed ?? 0) > 1 && (
+                    <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                      {finding.pageUrls.map((url, j) => {
+                        let label: string;
+                        try { label = new URL(url).pathname; } catch { label = url; }
+                        return (
+                          <span
+                            key={j}
+                            className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono truncate max-w-[180px]"
+                            title={url}
+                          >
+                            {label}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

@@ -15,6 +15,7 @@ const CategoryScoreSchema = z.object({
     details: z.string(),
     points: z.number(),
     maxPoints: z.number(),
+    pageUrls: z.array(z.string()).optional(),
   })),
   recommendations: z.array(z.string()),
 });
@@ -34,6 +35,7 @@ const RecommendationSchema = z.object({
     code: z.string(),
     label: z.string(),
   }).optional(),
+  affectedPages: z.array(z.string()).optional(),
 });
 
 const SiteAnalysisSchema = z.object({

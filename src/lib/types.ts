@@ -47,6 +47,7 @@ export interface Finding {
   details: string;
   points: number;
   maxPoints: number;
+  pageUrls?: string[];
 }
 
 export interface SiteAnalysis {
@@ -82,6 +83,7 @@ export interface Recommendation {
     code: string;
     label: string;
   };
+  affectedPages?: string[];
 }
 
 export interface ShareableResult {

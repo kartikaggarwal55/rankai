@@ -34,7 +34,7 @@ export function getErrorGuidance(error: string): { title: string; suggestion: st
     return { title: 'Domain Not Found', suggestion: "This domain doesn't exist. Check for typos in the URL." };
   if (error.includes('Invalid URL') || error.includes('valid URL'))
     return { title: 'Invalid URL', suggestion: 'Enter a complete URL like "example.com" or "https://example.com/page".' };
-  return { title: 'Analysis Failed', suggestion: 'Something went wrong. Try again or try a different URL.' };
+  return { title: 'Analysis Failed', suggestion: error || 'Something went wrong. Try again or try a different URL.' };
 }
 
 export const PHASES = [
@@ -251,8 +251,8 @@ export function AnalysisResultsView({
 
       <div key={activeTab} style={{ animation: 'fadeIn 0.25s ease-out' }}>
         {activeTab === 'overview' && <OverviewTab analysis={analysis} />}
-        {activeTab === 'geo' && <GEOTab geo={analysis.geo} />}
-        {activeTab === 'aeo' && <AEOTab aeo={analysis.aeo} />}
+        {activeTab === 'geo' && <GEOTab geo={analysis.geo} pagesAnalyzed={analysis.pagesAnalyzed} />}
+        {activeTab === 'aeo' && <AEOTab aeo={analysis.aeo} pagesAnalyzed={analysis.pagesAnalyzed} />}
         {activeTab === 'recommendations' && <RecommendationsTab analysis={analysis} />}
         {activeTab === 'insights' && <InsightsTab insights={analysis.aiInsights} />}
         {activeTab === 'comparison' && competitors.length > 0 && (
@@ -449,7 +449,7 @@ function PagesAnalyzedAccordion({ analysis }: { analysis: SiteAnalysis }) {
 }
 
 /* -- GEO Tab ------------------------------------------------------------- */
-function GEOTab({ geo }: { geo: GEOAnalysis }) {
+function GEOTab({ geo, pagesAnalyzed }: { geo: GEOAnalysis; pagesAnalyzed?: number }) {
   const categories: { key: keyof GEOAnalysis; name: string }[] = [
     { key: 'schemaMarkup', name: 'Schema Markup & Structured Data' },
     { key: 'citationWorthiness', name: 'Citation Worthiness' },
@@ -473,7 +473,7 @@ function GEOTab({ geo }: { geo: GEOAnalysis }) {
       </p>
       {sorted.map(({ key, name }, i) => (
         <div key={key} style={{ animation: `fadeInUp 0.3s ease-out ${i * 40}ms both` }}>
-          <CategoryCard name={name} category={geo[key]} type="geo" />
+          <CategoryCard name={name} category={geo[key]} type="geo" pagesAnalyzed={pagesAnalyzed} />
         </div>
       ))}
     </div>
@@ -481,7 +481,7 @@ function GEOTab({ geo }: { geo: GEOAnalysis }) {
 }
 
 /* -- AEO Tab ------------------------------------------------------------- */
-function AEOTab({ aeo }: { aeo: AEOAnalysis }) {
+function AEOTab({ aeo, pagesAnalyzed }: { aeo: AEOAnalysis; pagesAnalyzed?: number }) {
   const categories = Object.keys(aeo).map(key => ({
     key: key as keyof AEOAnalysis,
     name: formatCategoryKey(key),
@@ -496,7 +496,7 @@ function AEOTab({ aeo }: { aeo: AEOAnalysis }) {
       </p>
       {sorted.map(({ key, name }, i) => (
         <div key={key} style={{ animation: `fadeInUp 0.3s ease-out ${i * 40}ms both` }}>
-          <CategoryCard name={name} category={aeo[key]} type="aeo" />
+          <CategoryCard name={name} category={aeo[key]} type="aeo" pagesAnalyzed={pagesAnalyzed} />
         </div>
       ))}
     </div>

@@ -67,7 +67,7 @@ function DashboardContent() {
   const [phase, setPhase] = useState<AnalysisPhase>('idle');
   const [phaseDetail, setPhaseDetail] = useState('');
   const [error, setError] = useState('');
-  const [maxPages, setMaxPages] = useState(25);
+  const [maxPages, setMaxPages] = useState(10);
 
   const [pagesOpen, setPagesOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);

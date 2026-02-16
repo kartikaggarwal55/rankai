@@ -163,7 +163,7 @@ function HomeContent() {
   const [competitors, setCompetitors] = useState<(SiteAnalysis | null)[]>([null, null]);
   const [comparingPhases, setComparingPhases] = useState<(AnalysisPhase | null)[]>([null, null]);
   const [isPersistingPending, setIsPersistingPending] = useState(false);
-  const [maxPages, setMaxPages] = useState(25);
+  const [maxPages, setMaxPages] = useState(10);
   const [pagesOpen, setPagesOpen] = useState(false);
   const router = useRouter();
   const resultsRef = useRef<HTMLDivElement>(null);

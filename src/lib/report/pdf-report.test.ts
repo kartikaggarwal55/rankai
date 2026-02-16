@@ -122,6 +122,22 @@ describe('generateAnalysisReportPdf', () => {
     const loaded = await PDFDocument.load(bytes);
     expect(loaded.getPageCount()).toBeGreaterThan(0);
   });
+
+  it('renders page attribution without error', async () => {
+    const primary = makeAnalysis('https://example.com', 74);
+    primary.geo.schemaMarkup.findings[0].pageUrls = [
+      'https://example.com/',
+      'https://example.com/pricing',
+    ];
+    primary.topRecommendations[0].affectedPages = [
+      'https://example.com/pricing',
+    ];
+
+    const bytes = await generateAnalysisReportPdf(primary, []);
+    expect(bytes.length).toBeGreaterThan(1500);
+    const loaded = await PDFDocument.load(bytes);
+    expect(loaded.getPageCount()).toBeGreaterThan(0);
+  });
 });
 
 describe('buildReportFilename', () => {

@@ -66,6 +66,25 @@ export function RecommendationCard({ rec }: { rec: Recommendation }) {
           <h3 className="font-semibold text-text text-[15px] leading-snug">{rec.category}</h3>
           <p className="text-sm text-text-secondary mt-1.5 leading-relaxed">{rec.description}</p>
 
+          {rec.affectedPages && rec.affectedPages.length > 0 && (
+            <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+              <span className="text-[10px] font-medium text-text-muted uppercase tracking-wide">Affected:</span>
+              {rec.affectedPages.map((url, j) => {
+                let label: string;
+                try { label = new URL(url).pathname; } catch { label = url; }
+                return (
+                  <span
+                    key={j}
+                    className="text-[10px] px-1.5 py-0.5 rounded bg-bg-elevated text-text-muted font-mono truncate max-w-[180px]"
+                    title={url}
+                  >
+                    {label}
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
           {/* Code snippet */}
           {rec.codeSnippet && (
             <div className="mt-3">
